@@ -13,7 +13,7 @@ optimizer = tf.train.GradientDescentOptimizer(
 # train_step is the operation to move the values of x.
 train_step = optimizer.minimize(func)
 
-# execute train_step repeatly.
+# execute train_step repeatedly.
 with tf.Session() as sess:
     sess.run(tf.global_variables_initializer())
     for i in range(20):
