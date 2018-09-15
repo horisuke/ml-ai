@@ -167,9 +167,561 @@
 * 開発環境構築
     * Pythonの開発環境 Anaconda：省略
     * 動作確認環境 Jupyter Notebook：省略
+* TensorFLowの基本
+    * データフローグラフ
+        * 以下はtensroflowのデータフローグラフの概念を用い、定数a, bにそれぞれ1, 2を代入して足し算をするコードである。
+        ```python
+        // tensorflow-basic1.py
+        import tensorflow as tf
+
+        a = tf.constant(1, name='a')
+        b = tf.constant(2, name='b')
+        c = a + b
+        graph = tf.get_default_graph()
+
+        with tf.Session() as sess:
+            print(c)                     // Tensor("add:0", shape=(), dtype=int32)
+            print(sess.run(c))           // 3
+            print(graph.as_graph_def())  // 省略
+        ```
+        * 上記のうち、 $1+2=3$ の計算は ```sess.run(c)``` の箇所で行われる。
+        * ```c = a + b``` の部分では「aとbの加算結果を値に持つcというTensor」の定義をしているに過ぎない。
+        * cは上記の通り、Tensor型インスタンスである。
+        * Tensorflowはこのように2つのステップを踏んで実行する。
+            1. どのような計算をするかを定義する
+            2. まとめて計算を実行する
+        * データフローグラフはデータの流れをグラフ(ネットワーク)として表現したもので、計算内容を定義する役割を果たす。
+        * グラフは点と点を線でつないだ構造になっており、点のことをノードや頂点、線のことをエッジや辺と呼ぶ。
+        * 上述のコードでは、aやbといった定数、加算(add)といった操作は「ノード」に対応する。
+        * また、a,bはaddとそれぞれ関係性として結ばれ、「エッジ」に対応する。
+        * ```get_default_graph()``` でデータフローグラフの定義を取得し、```as_graph_def()``` でグラフを表示し確認できる。
+        * 上記のグラフの定義は下記の通り。
+        ```
+        node {
+          name: "a"
+          op: "Const"
+          attr {
+            key: "dtype"
+            value {
+              type: DT_INT32
+            }
+          }
+          attr {
+            key: "value"
+            value {
+              tensor {
+                dtype: DT_INT32
+                tensor_shape {
+                }
+                int_val: 1
+              }
+            }
+          }
+        }
+        node {
+          name: "b"
+          op: "Const"
+          attr {
+            key: "dtype"
+            value {
+              type: DT_INT32
+            }
+          }
+          attr {
+            key: "value"
+            value {
+              tensor {
+                dtype: DT_INT32
+                tensor_shape {
+                }
+                int_val: 2
+              }
+            }
+          }
+        }
+        node {
+          name: "add"
+          op: "Add"
+          input: "a"
+          input: "b"
+          attr {
+            key: "T"
+            value {
+              type: DT_INT32
+            }
+          }
+        }
+        versions {
+          producer: 26
+        }
+        ```
+    * セッション
+        * グラフの計算結果を得るためにはtf.Session()クラスのインスタンスを作成する必要がある
+        * 生成したインスタンスでrunメソッドを呼び出し、そこに計算したいノードを指定することで、実行結果を得ることができる。
+        * runメソッドには ```run([a, b])``` のように指定することで複数のノードを指定して同時に県産することもできる。
+    * データフローグラフの構成要素
+        * 上記のコードでは、定数や加算がノードに対応していたが、これらも合わせグラフの構成要素としては、以下がある。
+            * 定数
+                * ```tf.constant()``` を使って定義できる。1度定義したら、その後変更はできない。
+            * 変数
+                * ```tf.Variable()``` を使って定義できる。変数は値を変更できるため、学習対象のパラメータを定義しておくことでパラメータの更新、つまり学習が可能となる。
+                ```python
+                // tensorflow-basic2.py
+                import tensorflow as tf
+
+                a = tf.Variable(1, name='a')
+                b = tf.constant(1, name='b')
+                c = tf.assign(a, a + b)
+
+                with tf.Session() as sess:
+                    sess.run(tf.global_variables_initializer())
+                    print('1: [c, a] =', sess.run([c, a]))     // 1: [c, a] = [2, 2]
+                    print('2: [c, a] =', sess.run([c, a]))     // 2: [c, a] = [3, 3]
+                ```
+                * ```tf.assign()``` は変数に値を代入する操作を行なう。上記の場合、「変数aにa+bの結果を代入し、代入後のaを返す」という操作を行なう。
+                * 最初の ```sess.run()``` では、a=1の状態から、 cを計算する過程で.
+                a=2となり、cも2となる。よって、この時点での出力はa,c共に2となる。
+                * 2回目の ```sess.run()``` では、a=2の状態から、 cを計算する過程で.
+                a=3となり、cも3となる。よって、この時点での出力はa,c共に3となる。
+                * 変数は必ず最初に初期化する必要があり、 ```tf.global_variables_initializer()``` を使用することで全ての変数を初期化できる。
+                * 変数を指定して初期化するには、```tf.initialize_variables()``` を使用する。
+            * プレースホルダー
+                * ```tf.placeholder()``` を使って定義できる。様々な値を受け付けることができる箱のようなもの。
+                * 値が未定な状態でグラフを構築し、実行時に具体的な値を指定することが可能なため、主に入力データを扱う部分で利用される。
+                ```python
+                // tensorflow-basic3.py
+                import tensorflow as tf
+
+                a = tf.placeholder(dtype=tf.int32, name='a')
+                b = tf.constant(1, name='b')
+                c = a + b
+
+                with tf.Session() as sess:
+                    print('a + b =', sess.run(c, feed_dict={a: 1}))    // a + b = 2
+                ```
+                * aの定義部分ではplaceholderで箱を作っているが、値はセットしていない。
+                * aの値はrunメソッド実行時にfeed_dictメソッドでaに1をセットしている。feed_dict()は辞書型で引数を指定できるため、複数のplacefolderに対して、実行時に値をセットすることができる。
+                * 上記の実行結果は定数b=1と実行時にセットされるa=1の加算となり、　"a + b = 2"となる。
+            * 演算
+                * 加算・乗算といった演算もグラフのノードして表現される。
+                ```python
+                // tensorflow-basic4.py
+                import tensorflow as tf
+
+                a = tf.constant(2, name='a')
+                b = tf.constant(3, name='b')
+                c = tf.add(a, b)
+                d = tf.multiply(a, b)
+
+                with tf.Session() as sess:
+                    print('a + b = ', sess.run(c))    // a + b = 5
+                    print('a * b = ', sess.run(d))    // a * b = 6
+                ```
+    * 多次元配列とテンソル
+        * Tensorflowではスカラだけではなく、ベクトルや行列のような多次元配列のデータも扱うことができる。
+        * 配列ではない数値をスカラ、スカラやベクトル、行列を含む多次元配列をテンソルと呼ぶ。
+            |名称|次元|具体例|表記例|
+            |---|---|---|---|
+            |スカラ|0|1|$x$|
+            |ベクトル|1|[1,2,3]|$x_{i}$|
+            |行列|2|[[1,2],[3,4]]|$x_{ij}$|
+            |テンソル|任意|[[[1,2],[3,4]],...]|$x_{i...j}$|
+        * ベクトル演算
+            ```python
+            // tensorflow-basic5.py
+            import tensorflow as tf
+
+            a = tf.constant([1,2,3], name='a')
+            b = tf.constant([4,5,6], name='b')
+            c = a + b
+
+            with tf.Session() as sess:
+                print('a + b = ', sess.run(c))    // a + b = [5 7 9]
+            ```
+        * 行列演算
+            ```python
+            // tensorflow-basic6.py
+            import tensorflow as tf
+
+            a = tf.constant([[1,2],[3,4]], name='a')
+            b = tf.constant([[1],[2]], name='b')
+            c = tf.matmul(a, b)
+
+            print('shape of a:', a.shape)
+            print('shape of b:', b.shape)
+            print('shape of c:', c.shape)
+
+            with tf.Session() as sess:
+                print('a = \n', sess.run(a))
+                print('b = \n', sess.run(b))
+                print('c = \n', sess.run(c))
+            ```
+            * 3次元以上の配列でも同様に計算が可能であり、ベクトル演算、行列演算も含め、多次元配列同士の演算をテンソル演算と呼ぶ。
+        * テンソル演算とプレースホルダー
+            * ```tf.placeholder()``` でスカラ値だけでなく、テンソルを受けられるようにするためには、shape引数で次元を指定する必要がある。
+            * テンソルの大きさが決まっていない場合、未知の次元方向について、Noneを指定する。
+                ```python
+                // tensorflow-basic7.py
+                import tensorflow as tf
+
+                a = tf.placeholder(shape=(None, 2), dtype=tf.int32, name='a')
+
+                with tf.Session() as sess:
+                    print('-- Insert [[1, 2]] --')
+                    print('a = ', sess.run(a, feed_dict={a:[[1,2]]}))           //a =  [[1 2]]
+                    print('\n-- Insert [[1, 2], [3, 4]] --')
+                    print('a = ', sess.run(a, feed_dict={a: [[1, 2], [3, 4]]})) //a =  [[1 2] [3 4]]
+                ```
+            * 上記のコードでは、shapeで(None, 2)をしている。これにより、runメソッド呼び出し時に行方向に任意の成分を持つテンソルを渡すことができる。
+            * 1番目のrunでは1×2ベクトル、2番目のrunでは2×2行列を渡すことができている。
+    * セッションとSaver
+        * 前述の通り、変数はセッションごとに初期化が必要である。これは、あるセッションで変数を更新しても、別のセッションではその変数の値は引き継がれないことを意味する。
+        * つまり、学習対象のパラメータを変数として定義すると、同一セッションを維持している間でしか、更新後の変数、つまり学習後の更新済みの変数を利用できないことになる。
+            ```python
+            // tensorflow-basic8.py
+            import tensorflow as tf
+
+            a = tf.Variable(1, name='a')
+            b = tf.assign(a, a+1)
+
+            with tf.Session() as sess:
+                sess.run(tf.global_variables_initializer())
+                print('1st b = ', sess.run(b))      //1st b =  2
+                print('2nd b = ', sess.run(b))      //2nd b =  3
+
+            # session is changed.
+            with tf.Session() as sess:
+                print('-- New session --')
+                sess.run(tf.global_variables_initializer())
+                print('1st b = ', sess.run(b))      //1st b =  2
+                print('2nd b = ', sess.run(b))      //2nd b =  3
+            ```
+        * Saverを利用すると、変数の値をファイルに書き出したり、ファイルからプログラムに値を読み込んだりできる。
+        * これにより、機械学習モデルを保存したり、別のプロセスで使用することができる。
+            ```python
+            // tensorflow-basic9.py
+            import tensorflow as tf
+
+            a = tf.Variable(1, name='a')
+            b = tf.assign(a, a+1)
+
+            saver = tf.train.Saver()
+            with tf.Session() as sess:
+                sess.run(tf.global_variables_initializer())
+                print(sess.run(b))                    // 2
+                print(sess.run(b))                    // 3
+                # Save the values of variables to model/model.ckpt.
+                saver.save(sess, 'model/model.ckpt')
+
+            saver = tf.train.Saver()
+            with tf.Session() as sess:
+                sess.run(tf.global_variables_initializer())
+                # Restore the values of variables from model/model.ckpt.
+                saver.restore(sess, save_path='model/model.ckpt')
+                print(sess.run(b))                    // 4
+                print(sess.run(b))                    // 5
+            ```
+    * TensorBoardによるグラフの可視化
+        * TensorBoardはTensorflowに付属するツールでモデルの構造や学習状況を可視化できる。
+        * グラフ以外にも損失の履歴やベクトルの埋め込みなど様々なものを可視化できる。
+        * グラフを可視化するには、以下のように ```tf.summary.FileWriter()``` を使い、必要な情報を書き出す必要がある。
+            ```python
+            // tensorflow-basic10.py
+            import tensorflow as tf
+
+            LOG_DIR = './logs'
+
+            a = tf.constant(1, name='a')
+            b = tf.constant(1, name='b')
+            c = a + b
+
+            graph = tf.get_default_graph()
+            with tf.summary.FileWriter(LOG_DIR) as writer:
+                writer.add_graph(graph)
+            ```
+        * 上記を実行すると、正常終了し、ml-trial/logs以下にグラフの可視化に必要な情報が書き出された"events.out.tfevents.1536461582.ubuntu"のようなファイルが生成される。
+        * このファイルをtensorboardで開き、確認する。
+        * ml-trialディレクトリ以下に移動し、以下のコマンドでAnacondaの仮想環境に入る。
+            * $ source activate ml-trial
+        * プロンプトの先頭に(ml-trial)が付き、仮想環境には入れていることを確認する。
+        * 以下のコマンドで生成したファイルを指定して、tensorboardを起動する。
+            * $ tensorboard --logdir=logs
+            * TensorBoard 1.10.0 at http://ubuntu:6006 (Press CTRL+C to quit)
+        * 上記のようなURLが表示されるので、ブラウザでアクセスすると、tensorboardが表示される。
+        * ブラウザを閉じ、terminalでctrl_Cすることで、tensorboardを閉じる。
+        * 以下のコマンドで仮想環境から抜ける
+            * $ source deactivate
+    * 最適化と勾配法
+        * 機械学習・深層学習における学習とは予測の誤差を最小化・最適化することを指す。
+        * ここでの最適化は与えられた関数を最小もしくは最大にするようなパラメータを見つけることを意味する。
+        * TensorFlowには「勾配法」と呼ばれる手法により、関数を最小化するための機能が備わっている。
+        * 勾配法は最適化問題において関数の勾配に関する情報を解の探索に用いるアルゴリズムの総称である。
+        * それらのうち、最もシンプルな手法が最急降下法で、以下の手順を辿る。
+            1. パラメータを適当な値で初期化
+            2. 与えられたパラメータにおける関数の傾き(勾配)を計算
+            3. 最も傾きの大きい方向にパラメータを少しずらす
+            4. 手順2, 3を繰り返す
+        * 最急降下法をゼロから実行しようとすると、特に手順2の勾配の計算部分が難しいが、TensorFlowでは手順2,3を行うための便利な仕組みが用意されている。
+        * 2次関数 $y=(x-1)^2$ を最小化する $x$ を見つけるための実装は以下の通り。
+            ```python
+            // tensorflow-basic11.py
+            import tensorflow as tf
+
+            # define parameters as variables.
+            x = tf.Variable(0., name='x')
+            # define the function to be minimized by parameters.
+            func = (x - 1) ** 2
+
+            # set the learning-rate
+            optimizer = tf.train.GradientDescentOptimizer(
+                learning_rate=0.1
+            )
+
+            # train_step is the operation to move the values of x.
+            train_step = optimizer.minimize(func)
+
+            # execute train_step repeatly.
+            with tf.Session() as sess:
+                sess.run(tf.global_variables_initializer())
+                for i in range(20):
+                    sess.run(train_step)
+                print('x = ', sess.run(x))                  // x = 0.98847073
+            ```
+        * 始めにパラメータxを変数として定義し、 xを使って最小化したい関数funcを定義する。
+        * ```tf.train.GradientDescentOptimizer``` が最急降下法におけるパラメータの更新を担当し、```minimize()``` メソッドの引数でfuncを渡すことにより、パラメータxを少しずつずらす操作```train_step``` を得ることができる。
+        * 「少しずつずらす」は```learning_rate``` で指定する。
+        * 最後にforループで```train_step``` を繰り返し実行することで関数funcの最小化処理を行う。
+        * この例では初期値を $x=0$ としているが、```train_step``` を20回繰り返すことで最適な値 $x=1$ に近い値 $x =0.98847073$ を得ることができる
+        * 勾配法の機械学習への適用
+            * 勾配法を機械学習に適用するためにBoston house-pricesデータセットを使用する
+            * Boston house-pricesは住宅の部屋数や高速道路へのアクセスのしやすさなど13の変数(説明変数)とそれに対応する住宅価格(中央値)が506個分含まれるデータセットである。
+            * このデータセットを使用し、13の変数を受け取り、住宅価格の推定値を出力する関数を学習することを考える。
+            * この関数を機械学習モデルと呼ぶ。
+                ```python
+                // tensorflow-basic12.py
+                import tensorflow as tf
+                import matplotlib.pyplot as plt
+
+                # Download the dataset of Boston house-prices
+                (x_train, y_train), (x_test, y_test) = tf.keras.datasets.boston_housing.load_data()
+
+                # global settings of matplotlib
+                plt.rcParams['font.size'] = 10*3
+                plt.rcParams['figure.figsize'] = [18, 12]
+                plt.rcParams['font.family'] = ['IPAexGothic']
+
+                # display histogram "house prices/$1000" vs "number of data"
+                plt.hist(y_train, bins=20)        // bins:number of bar in histogram
+                plt.xlabel('house prices/$1000')
+                plt.ylabel('number of data')
+                plt.show()
+
+                # display plot "number of rooms" vs "house prices/$1000"
+                plt.plot(x_train[:, 5], y_train, 'o')
+                    // 6th column of x_train is "number of rooms"
+                    // 'o' means circle marker
+                plt.xlabel('number of rooms')
+                plt.ylabel('house prices/$1000')
+                plt.show()
+
+                # preprocessing
+                x_train_mean = x_train.mean(axis=0)
+                x_train_std = x_train.std(axis=0)
+                y_train_mean = y_train.mean()
+                y_train_std = y_train.std()
+
+                x_train = (x_train - x_train_mean) / x_train_std
+                y_train = (y_train - y_train_mean) / y_train_std
+                x_test = (x_test - x_train_mean) / x_train_std
+                y_test = (y_test - y_train_mean) / y_train_std
+
+                # display plot "number of rooms" vs "house prices/$1000" after preprocessing
+                plt.plot(x_train[:, 5], y_train, 'o')
+                plt.xlabel('number of rooms(after)')
+                plt.ylabel('house prices/$1000(after)')
+                plt.show()
+
+                # define the inference model of Boston house-prices
+                x = tf.placeholder(tf.float32, (None, 13), name='x')
+                y = tf.placeholder(tf.float32, (None, 1), name='y')
+                w = tf.Variable(tf.random_normal((13, 1)))
+                pred = tf.matmul(x, w)
+
+                # define the loss function and learning rate
+                loss = tf.reduce_mean((y-pred)**2)
+                optimizer = tf.train.GradientDescentOptimizer(
+                    learning_rate=0.1
+                )
+                train_step = optimizer.minimize(loss)
+
+                # execute train step and repeatedly
+                with tf.Session() as sess:
+                    sess.run(tf.global_variables_initializer())
+                    for step in range(100):
+                        train_loss, _ = sess.run(
+                            [loss, train_step],
+                            feed_dict={
+                                x : x_train,
+                                y : y_train.reshape((-1, 1))
+                            }
+                        )
+                        print('step: {}, train_loss: {}'.format(step, train_loss))
+
+                    pred = sess.run(
+                        pred,
+                        feed_dict={
+                            x: x_test
+                        }
+                    )
+                ```
+            * まず、```tf.keras.datasets.boston_housing.load_data()```でBoston house-pricesのデータセットをダウンロードする。
+                * ダウンロードしたデータは"~/.keras/datasets/"以下に保存される。
+            * 返り値は```x_train```, ```y_train```を要素に持つタプル(学習データ：学習に用いるデータ)、及びは```x_test```, ```y_test```を要素に持つタプル(テストデータ：精度の評価用に用いるデータ)となる。
+            * ```x_train```, ```x_test```には行方向に各データ、列方向に各説明変数の値が格納されている。
+            * ```y_train```, ```y_test```には行方向に各データの住宅価格が格納されている(列方向は1列のみ)。
+            * 取得したデータの概要を知るために```y_train```をヒストグラムで表示する。表示のためにはmatplotlibを使用する。
+            * ```plt.rcParams()```でmatplotlibのglobalな設定を行う。
+            * ```plt.hist()```に```y_train```を渡し、```plt.show()```でヒストグラムを表示する。
+            * 横軸は```y_train```の値(=住宅価格)全体を20分割(binsで20を指定)し、棒グラフとして表示する。
+            * 縦軸は```y_train```のデータを横軸の各棒グラフに属する数を表す。
+            * 次に部屋数と住宅価格の関係をplotすることを考える。
+            * ```plt.plot()```に横軸、縦軸に設定するデータを渡し、plotのmarker種を設定する。
+                * 部屋数はx_trainの6列目に格納されているので、横軸のデータとして、```x_train[:, 5]```を指定する。
+                * 縦軸のデータとして、```y_train```(住宅価格)を指定する。
+                * plotのmarkerとして、```'o'```を指定し、circle markerとする。
+            * 同様に```plt.show()```でplotを表示する。
+            * 入力の前処理(preprocessing)では、まず```mean()```メソッドと```std()```メソッドでそれぞれ平均値、標準偏差を求める。
+                * ```x_train```は行方向と列方向にデータが存在するため、行方向に対して、平均値・標準偏差を求めるためには```axis```で0を指定する。
+            * これらの値から、(各要素 - 平均値) / 標準偏差を算出し、入力データの標準化を行う。
+            * 標準化されたデータ群は平均0、分散1のデータ群となり、データが全体的に原点付近に集まるため、学習やパラメータの調整がしやすくなる。
+            * ```x_test```, ```y_test```に対しても標準化を行うが、その際に使用する平均値と標準偏差はそれぞれ、```x_train```, ```y_train```で算出したものを使用する。
+            * 次にモデルの定義を行なう。ここではシンプルに各説明変数(x)を重み付き(w)で足し合わせたものモデルとしている。
+            * 説明変数(x)と推定値(y)はそれぞれ、(None, 13), (None, 1)のplaceholderとして定義し、重み(w)は(13, 1)の1未満のランダムな値を初期値として持つ変数として設定する。
+            * ここでは、重みwがパラメータでpredが予測結果を表すテンソル(モデル)となる。
+            * 次に損失関数(=目的関数：最小化したい関数)を定義する。ここでは実測値(y)と推定値(pred)の差の二乗の平均(=最小二乗誤差：MSE/Mean Squared Error)を損失関数としている。
+            * 前述の実装と同様、```tf.train.GradientDescentOptimizer``` が最急降下法におけるパラメータの更新を担当するため、```minimize()``` メソッドの引数でlossを渡すことにより、パラメータwを少しずつずらす操作```train_step``` を得ることができる。```learning_rate```は0.1と設定する。
+            * 最後に```train_step```を使って、forループを回し、学習を行う。
+            * ```tf.Session()```の```run()```メソッドの第1引数```fetches```には、学習した処理結果を取り出したい(=fetchしたい)ネットワーク(=学習したいネットワーク)のインスタンスを設定する。
+                * ここでは、損失関数の値```loss```と最急降下法の操作```train_step```をリストとして渡す。
+            * 引数```feed_dict```には、定義の時点で不定としていた、x, yに値をfeedする(=書き込む)。
+            * ここでは、xに```x_train```、yに```y_train```を設定する。
+            * ```run()```メソッドreturn値は```loss```, ```train_step```のそれぞれのreturn値となる。
+            * ```loss```は値となるため、```train_loss```として値を保持する。
+            * ```train_step```は操作を表すインスタンスなので、return値は存在しない(Noneとなる)。
+            * モデルの学習が終了したら、predを```run```メソッドに渡し、x_testをfeed_dictにセットして、評価データを使用し、学習したモデルを評価する。
+    * 確率的勾配降下法とミニバッチ
+        * 上記では最急降下法を使用して、機械学習のモデルの学習を行ったが、これはデータの数が506と小さなものだったため、全てのデータをメモリ上に1度に展開でき、学習ができた。
+        * 実際には数万～数百万のデータを扱うことがあり、そういう場合は確率的勾配降下法(Stochastic Gradient Descent)を使用する。
+        * SGDでは全てのデータを1度に使用せず、ミニバッチと呼ばれるデータの塊に分割して学習する。
+        * これにより、データが大量の場合にも学習が可能となるのはもちろん、学習の挙動が確率的になるため、局所解に陥りづらくなるといったメリットもある。
+        * よって、学習データがそれほど大量でなくても、SGDを使用するのが一般的となっている。
+        * 以下はSGDによる学習の実装コードとなる。
+            ```python
+            // tensorflow-basic13.py
+            import tensorflow as tf
+            import matplotlib.pyplot as plt
+            import numpy as np
+
+            BATCH_SIZE = 32
+
+            def get_batches(x, y, batch_size):
+                n_data = len(x)              // リストの長さを取得する
+                indices = np.arange(n_data)  // 0～n_data-1までの値を順に要素に持つ1次元配列を生成
+                np.random.shuffle(indices)   // 0～n_data-1までの値の要素順をシャッフルする
+                x_shuffled = x[indices]      // xの要素順をindicesの要素の値順にシャッフルし、リストx_shuffledを生成
+                y_shuffled = y[indices]      // yの要素順をindicesの要素の値順にシャッフルし、リストx_shuffledを生成
+
+                # Pick up (batch_sizes) data randomly from original data.
+                for i in range(0, n_data, batch_size): // iを0～n_dataまでの値でbatch_size間隔で生成する
+                    x_batch = x_shuffled[i: i + batch_size] // x_shuffledのうち、batch_size分の要素をx_batchに代入し、リストにする
+                    y_batch = y_shuffled[i: i + batch_size] // y_shuffledのうち、batch_size分の要素をy_batchに代入し、リストにする
+                    yield x_batch, y_batch                  // この時点でのx_batch, y_batchをメソッド呼び出しもとにreturnする
 
 
+            # The followings are same as tensorflow-basic12.py ----------------
+            # Download the dataset of Boston house-prices
+            (x_train, y_train), (x_test, y_test) = tf.keras.datasets.boston_housing.load_data()
 
+            # global settings of matplotlib
+            plt.rcParams['font.size'] = 10 * 3
+            plt.rcParams['figure.figsize'] = [18, 12]
+            plt.rcParams['font.family'] = ['IPAexGothic']
+
+            # display histogram "house prices/$1000" vs "number of data"
+            plt.hist(y_train, bins=20)  # bins:number of bar in histogram
+            plt.xlabel('house prices/$1000')
+            plt.ylabel('number of data')
+            plt.show()
+
+            # display plot "number of rooms" vs "house prices/$1000"
+            plt.plot(x_train[:, 5], y_train, 'o')
+            # 6th column is "number of rooms"
+            # 'o' means circle marker
+            plt.xlabel('number of rooms')
+            plt.ylabel('house prices/$1000')
+            plt.show()
+
+            # preprocessing
+            x_train_mean = x_train.mean(axis=0)
+            x_train_std = x_train.std(axis=0)
+            y_train_mean = y_train.mean()
+            y_train_std = y_train.std()
+
+            x_train = (x_train - x_train_mean) / x_train_std
+            y_train = (y_train - y_train_mean) / y_train_std
+            x_test = (x_test - x_train_mean) / x_train_std
+            y_test = (y_test - y_train_mean) / y_train_std
+
+            # display plot "number of rooms" vs "house prices/$1000" after preprocessing
+            plt.plot(x_train[:, 5], y_train, 'o')
+            plt.xlabel('number of rooms(after)')
+            plt.ylabel('house prices/$1000(after)')
+            plt.show()
+
+            # define the inference model of Boston house-prices
+            x = tf.placeholder(tf.float32, (None, 13), name='x')
+            y = tf.placeholder(tf.float32, (None, 1), name='y')
+            w = tf.Variable(tf.random_normal((13, 1)))
+            pred = tf.matmul(x, w)
+
+            # define the loss function and learning rate
+            loss = tf.reduce_mean((y - pred) ** 2)
+            optimizer = tf.train.GradientDescentOptimizer(
+                learning_rate=0.1
+            )
+            train_step = optimizer.minimize(loss)
+            # The above are same as tensorflow-basic12.py ----------------
+
+            # execute train step and repeatedly
+            step = 0
+            with tf.Session() as sess:
+                sess.run(tf.global_variables_initializer())
+                for epoch in range(100):
+                    for x_batch, y_batch in get_batches(x_train, y_train, 32):　// x_train, y_trainの要素をシャッフルし、32要素ずつ取り出す
+                        train_loss, _ = sess.run(
+                            [loss, train_step],
+                            feed_dict={
+                                x: x_batch,
+                                y: y_batch.reshape((-1, 1))
+                            }
+                        )
+                        print('step: {}, train_loss: {}'.format(step, train_loss))
+                        step += 1
+
+                pred_ = sess.run(
+                    pred,
+                    feed_dict={
+                        x: x_test
+                    }
+                )
+            ```
+        * 上記のコードは最急降下法とほとんど同じであるが、sess.run()で処理するデータの単位が異なる。
+        * ```get_batches()```では```x_train```, ```y_train```を渡し、各リストの要素をシャッフルして、ミニバッチに分割し、分割したミニバッチを呼ばれるたびに1つずつ返す処理をしている。
+            * ```yield```を使うことにより、その時点での```x_batch```, ```y_batch```を返すことでその関数を抜けることができる。
+        * ミニバッチを1つ分の処理単位を「イテレーション」、イテレーションを繰り返し(=```get_batches()```で全てのデータを取り出す)、データ全体を処理単位を「エポック」と呼ぶ。
+        * するする以下はSGDによる学習の実装コードとなる。
+* ニューラルネットワークとKeras
+    * a
 
 
 
