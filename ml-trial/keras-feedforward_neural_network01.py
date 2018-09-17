@@ -4,7 +4,7 @@ from tensorflow.python.keras.models import Sequential
 from tensorflow.python.keras.layers import Dense
 from tensorflow.python.keras.callbacks import TensorBoard
 
-# Download the dataset of Boston house-prices
+# Download the dataset of MNIST
 (x_train, y_train), (x_test, y_test) = mnist.load_data()
 
 # Check the shapes of MNIST data to be downloaded.
