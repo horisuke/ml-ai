@@ -648,15 +648,15 @@
             plt.rcParams['font.family'] = ['IPAexGothic']
 
             # display histogram "house prices/$1000" vs "number of data"
-            plt.hist(y_train, bins=20)  # bins:number of bar in histogram
+            plt.hist(y_train, bins=20)        // bins:number of bar in histogram
             plt.xlabel('house prices/$1000')
             plt.ylabel('number of data')
             plt.show()
 
             # display plot "number of rooms" vs "house prices/$1000"
             plt.plot(x_train[:, 5], y_train, 'o')
-            # 6th column is "number of rooms"
-            # 'o' means circle marker
+                // 6th column is "number of rooms"
+                // 'o' means circle marker
             plt.xlabel('number of rooms')
             plt.ylabel('house prices/$1000')
             plt.show()
@@ -721,7 +721,222 @@
         * ミニバッチを1つ分の処理単位を「イテレーション」、イテレーションを繰り返し(=```get_batches()```で全てのデータを取り出す)、データ全体を処理単位を「エポック」と呼ぶ。
         * するする以下はSGDによる学習の実装コードとなる。
 * ニューラルネットワークとKeras
-    * a
+    * パーセプトロンとは
+        * ニューラルネットワークの最も基本的なもので、複数の入力から1つの出力を行う。
+        * 出力値は入力を重み付きで足し合わせた値が定められた閾値を超えている場合は1となり、超えていなければ、0となる。
+        * パーセプトロンのようにある閾値を境に出力値が異なる関数をステップ関数と呼ぶ。
+        * パーセプトロンは線形分離可能な問題を正しく表現することができる。
+            * 線形分離可能とは直線で2種類の点の集まりに分けることができる状態のことであり、ANDやOR、NANDが該当する。
+        * 一方、線形分離不可能な問題は表現できない。
+            * XORは線形分離不可能なものの1つで、2つの入力のうち、一方が1のときに出力が1になり、それ以外の場合は出力が0になるものを指す。
+            * ただし、XORは単一のパーセプトロンでは表現できないが、複数のパーセプトロンを組み合わせることで表現することができる。
+        * 複数のパーセプトロンを組み合わせたものを多層パーセプトロン(MLP:Multi Layer Perceptron)と呼ぶ。
+    * シグモイドニューロンとは
+        * パーセプトロンはステップ関数(=0 or 1を出力する非連続関数)を使用しているが、関数が滑らかではないため、勾配法を使って学習することができない。
+        * そこでステップ関数の代わりに滑らかな関数であるシグモイド関数を用いる。
+        * シグモイド関数を用いたニューロンをシグモイドニューロンと呼ぶ。
+    * 活性化関数とは
+        * ステップ関数やシグモイド関数など重み付き入力の和(=ニューロンへの入力)をニューロンの出力に変換する関数のこと。
+        * シグモイド関数は重み付き入力の和が大きい場合、および小さい場合はステップ関数とほとんど同じ値を取る。
+        * また、ステップ関数とは異なり、滑らかに値が変化するため、勾配法を適用することが可能となるため、ニューラルネットワークの活性化関数として使われることがある。
+    * 順伝播型ニューラルネットワークとは
+        * ニューロンが層のように並び、隣接する層の間のみ結合するネットワークのことで、入力は順方向にのみ伝播して前の層に戻ることはないものを表す。
+        * 最初と最後の層をそれぞれ入力層、出力層と呼び、その間の層を中間層などと呼ぶ。
+        * 各ニューロンは複数の入力を受け取り、それらから重み付き入力の和を計算し、さらにその重み付き入力の和にバイアス項を加えて、活性化関数を使用して得られた値を出力する。
+    * Kerasを使った順伝播型ニューラルネットワークの実装
+        * 手書き文字認識のデータセットMNISTを使用する。
+        * MNISTは28×28 pixelの0～9の数字が書かれた手書き文字70000枚のデータセットであり、各ピクセルは灰色の濃淡を表す0～255を取る(0は黒、255は白を表す)
+        ```python
+        // keras-feedforward_neural_network01.py
+        from tensorflow.python.keras.datasets import mnist
+        from tensorflow.python.keras.utils import to_categorical
+        from tensorflow.python.keras.models import Sequential
+        from tensorflow.python.keras.layers import Dense
+        from tensorflow.python.keras.callbacks import TensorBoard
+
+        # Download the dataset of Boston house-prices
+        (x_train, y_train), (x_test, y_test) = mnist.load_data()
+
+        # Check the shapes of MNIST data to be downloaded.
+        print('x_train.shape: ', x_train.shape)  // (60000, 28, 28)
+        print('x_test.shape: ', x_test.shape)    // (10000, 28, 28)
+        print('y_train.shape: ', y_train.shape)  // (60000, )
+        print('y_test.shape: ', y_test.shape)    // (10000, )
+
+        # Preprocessing - exchange the scale of data
+        x_train = x_train.reshape(60000, 784)
+        x_train = x_train/255
+        x_test = x_test.reshape(10000, 784)
+        x_test = x_test/255
+
+        # Preprocessing - change class label to 1-hot vector
+        y_train = to_categorical(y_train, 10)
+        y_test = to_categorical(y_test, 10)
+
+        # Create the neural network
+        # Input layer -> Hidden layer
+        model = Sequential()
+        model.add(
+            Dense(
+                units=64,
+                input_shape=(784, ),
+                activation='relu'
+            )
+        )
+
+        # Hidden layer -> Output layer
+        model.add(
+            Dense(
+                units=10,
+                activation='softmax'
+            )
+        )
+
+        # Learn the model
+        model.compile(
+            optimizer='adam',
+            loss='categorical_crossentropy',
+            metrics=['accuracy']
+        )
+        tsb = TensorBoard(log_dir='./logs')
+        history_adam=model.fit(
+            x_train,
+            y_train,
+            batch_size=32,
+            epochs=20,
+            validation_split=0.2,
+            callbacks=[tsb]
+        )
+        ```
+        * まず、```tensorflow.python.keras.datasets```の```mnist```をインポートし、Boston house-pricesと同様、```load_data()```でMNISTのデータセットをダウンロードする。
+        * ダウンロードした配列の形をshapeメソッドで確認する。
+            * 学習データx_train/y_trainは60000枚あり、x_trainは28×28の画像データとなっている。
+            * y_trainはx_trainに対する正解データが値として格納されている。
+            * x_test/y_testは学習に使用せず、学習結果を評価するために使用する。データ自体はそれぞれx_train, y_trainと同じである。
+        * 次に各データを前処理する。
+        * x_train/x_testは28×28の画像を```reshape()```メソッドを使用して1次元にする。28×28=784なので、(60000, 28, 28)から(60000, 784)、(10000, 28, 28)から(10000, 784)への変換をそれぞれ行なう。
+        * また、x_train/x_testはそれぞれ255で割り、各値を0～1に収まるfloat型に変換し、正規化する。
+        * y_train/y_testは値として正解ラベルを持っているが、```to_categorical()```メソッドで正解ラベルをベクトルに変換する。ベクトルは正解ラベルに該当する要素を1にし、それ以外を0にして表現する。
+        * このベクトル表現を1-hotベクトルと呼ぶ。
+        * 次にKerasのSequential APIを使い、多層ニューラルネットワークを構築する。
+            * Sequential APIはKerasでモデルを構築する方法の1つで、用意されているレイヤーを```add```メソッドで追加していくだけでモデルが構築できる。
+        * 始めにSequentialクラスのインスタンス```model```を作り、```add```メソッドでDenceレイヤーを用い、全結合層を追加する。
+        * Denceレイヤーでは引数として以下を指定し、入力層から中間層を構築する。
+            * units=64　：　出力ニューロンの数(出力次元の大きさ)
+            * input_shape=(784, )　：　入力のテンソルの形・大きさ
+            * activation='relu'　：　活性化関数
+        * 'relu'は活性化関数としてReLU関数を指定することを意味する。
+            * ReLU関数はランプ関数と呼ばれ、入力が0より小さい場合、出力は0となり、入力が0以上の場合、出力は入力値となるような関数である。
+            * シグモイド関数に比べて、ReLU関数を活性化関数関数として用いる方が、収束が速くなる場合があるため、よく用いられていることが多い。
+        * 再度、```model```に```add```メソッドでDenceレイヤーを用いて、全結合層を追加する。
+        * Denceレイヤーでは引数として以下を指定し、中間層から出力層を構築する。
+            * units=10　：　出力ニューロンの数(出力次元の大きさ)
+            * activation='softmax'　：　活性化関数
+        * MNISTは0～9の10クラスのラベルが対象なので、出力層のニューロンの数として10を```units```で指定する。
+        * ```input_shape```はKerasが自動で計算するため、上記のように省略可能。
+        * 'softmax'は活性化関数としてsoftmax関数を指定することを意味する。
+            * softmax関数はシグモイド関数を多出力に拡張させたもので、多クラス分類問題の活性化関数として用いられている。
+            * softmax関数により、各出力を[0, 1]に収める正規化ができ、かつ各出力値の和を1にすることができる。
+            * MNISTの認識モデルにおいて、出力層の各ニューロンの出力値が[0,1]に収まり、それらの出力値の合計が1になることは入力画像がどの数字であるかを認識させる作業において便利に使用することができる。
+        * 次にモデルの学習を行なうための設定を以下の通り、```compile()```メソッドを使用して行なう。
+            * optimizer='adam'　：　最適化アルゴリズムとしてadamを指定
+            * loss='categorical_crossentropy'　：　損失関数として交差エントロピーを指定
+            * metrics=['accuracy']　：　c
+        * Boston house-pricesの学習において、最適化アルゴリズムはSGDを用いていたが、ここではAdamと呼ばれるアルゴリズムを使用する。Kerasでは```optimizer```に引数を指定するだけで最適化アルゴリズムを変更できる。
+            * Adam(Adaptive Moment Estimation)は直近の勾配情報を利用する、といった工夫を実装しているアルゴリズムでSGDに比べ、収束が速いと言われている。
+        * 損失関数としては、```'categorical_crossentropy'```を指定し、交差エントロピーを用いる。
+            * 交差エントロピーは2つの確率分布間に定義される尺度で、分類問題の損失関数として用いられることが多い。
+            * 分類問題においてはこの値が小さくなるように学習を行う。
+        * 学習履歴に精度(accuracy)を追加するために```model```の```metrics```で```'accuracy'```を追加する。
+            * 学習結果の履歴は```fit()```メソッドの返り値のインスタンスから取得できるが、デフォルトだとloss(訓練データセットのにおける損失の値)のみが履歴として取得できる状態になっている。
+            * ```metrics```で```'accuracy'```を追加することにより、acc(訓練データにおけるモデルの精度)が履歴として追加できる状態となる。
+            * また、後述の```fit()```メソッドにて検証データを設定すると、val_loss(検証データにおける損失)、val_acc(検証データに対するモデルの精度)も履歴として取得できるようになる。
+        * 次にモデルの学習を以下の通り、```fit()```メソッドを使用して行なう。
+            * x=x_train　：　学習用データ
+            * y=y_train　：　学習用データのラベルデータ
+            * batch_size=32　：　ミニバッチのサイズ
+            * epochs=20　：　エポックサイズ
+            * validation_split=0.2　：　学習用データのうち、検証用データとして使用する割合
+            * callbacks=[tsb]　：　
+        * ```fit()```メソッドの引数```x```, ```y```, ```batch_size```, ```epochs```にはそれぞれ、学習用データ(x_train)、学習用データのラベルデータ(y_train)、ミニバッチのサイズ、エポックサイズを指定する。
+        * ```validation_split```には学習用データ(x_train)のうち、検証用データとして使用する割合を指定する。
+            * 検証用データは学習したモデルが未知のデータに対してどの程度の予測性能を持っているかを測るために使用するデータのこと。
+            * 0.2を指定することでx_trainのうちの80%をモデルの学習に使用し、残りの20%を学習したモデルの検証のために使用するようになる。
+            * モデルの検証は1エポックが終了する毎に行われ、上述のval_loss, val_accなどを学習の履歴として残すことができる。
+        * callbacksには```tsb = TensorBoard(log_dir='./logs')```を指定し、学習の結果をlogs以下のファイルに出力させる。学習後、ファイルを指定してTensorboardから学習結果を確認することができる。
+        * 学習を行ない、Tensorboardから学習結果を確認する。
+            * accは学習が進むにつれて増加し、lossは減少していることがわかる。これは学習が正しく進められていることを意味する。
+            * ただし、この傾向は必ずしも未知のデータに対して高い予測性能を持っていることを意味するとは限らず、val_acc, val_lossの数値の傾向も合わせてみる必要がある。
+            * val_acc, val_lossは学習では使用していない未知のデータ(検証データ)に対する精度、損失の値になるが、val_accが大きく、val_lossが小さくなっている方がよいと言える。
+            * 結果を見ると、val_accが小さくなったり、val_lossが大きくなっているところもあり、これは「過学習」と呼ばれる。
+            * 過学習は学習用データにモデルが過度に適合してしまうと起こり、未知のデータに対する予測性能が低下する現象である。
+    * KerasのFunctional APIを使った順伝播型ニューラルネットワークの実装
+        * 上述のSequential APIを使用した順伝播型ニューラルネットワークによるMNIST認識モデルをFunctional APIを使って実装する。
+        * Sequential APIは便利だが、入力や出力が複数あるような複雑なモデルを記述することができないため、KerasではFunctional APIという別のインターフェースが用意されている。
+        ```python
+        // keras-feedforward_neural_network02.py
+        from tensorflow.python.keras.datasets import mnist
+        from tensorflow.python.keras.utils import to_categorical
+        from tensorflow.python.keras.callbacks import TensorBoard
+        from tensorflow.python.keras.models import Model
+        from tensorflow.python.keras.layers import Input, Dense
+
+        # The followings are same as keras-feedforward_neural_network01.py ----------------
+        # Download the dataset of MNIST
+        (x_train, y_train), (x_test, y_test) = mnist.load_data()
+
+        # Preprocessing - exchange the scale of data
+        x_train = x_train.reshape(60000, 784)
+        x_train = x_train/255
+        x_test = x_test.reshape(10000, 784)
+        x_test = x_test/255
+
+        # Preprocessing - change class label to 1-hot vector
+        y_train = to_categorical(y_train, 10)
+        y_test = to_categorical(y_test, 10)
+        # The above are same as keras-feedforward_neural_network01.py ----------------
+
+        # Create the neural network
+        input = Input(shape=(784, ))
+        middle = Dense(units=64, activation='relu')(input)
+        output = Dense(units=10, activation='softmax')(middle)
+        model = Model(inputs=input, outputs=output)
+
+        # The followings are same as keras-feedforward_neural_network01.py ----------------
+        # Learn the model
+        model.compile(
+            optimizer='adam',
+            loss='categorical_crossentropy',
+            metrics=['accuracy']
+        )
+        tsb = TensorBoard(log_dir='./logs')
+        history_adam = model.fit(
+            x_train,
+            y_train,
+            batch_size=32,
+            epochs=20,
+            validation_split=0.2,
+            callbacks=[tsb]
+        )
+        # The above are same as keras-feedforward_neural_network01.py ----------------
+        ```
+        * Sequential APIからFunctional APIへの変更に伴い、importするmoduleが変更となる。
+            * Sequential→Modelへ変更
+            * レイヤーはDenseに加え、Inputをimportするように変更
+        * MNISTのデータセットの取得及び学習データ・テストデータ、及びそれらのラベルデータに対する前処理はSequential APIを使用した時と同じ。
+        * ネットワークの構築に関して、Sequential APIではレイヤーを追加してモデルを構築していたのに対し、Functional APIでは同じレイヤーオブジェクトを追加していくが、オブジェクトを次の層の引数に与えることでモデルを構築する。
+            * 上述の通り、まず```input```というテンソルを生成する。
+            * 次に```input```を中間層のDenseの引数として渡し、```middle```というテンソルを生成する。
+            * 最後に```middle```を出力層のDenseの引数として渡し、```output```というテンソルを生成する。
+        * また、Functional APIでは、Modelクラスの引数```inputs```、```outputs```にそれぞれ入力のテンソル、出力のテンソルを指定することでモデルを構築することができる。
+            * ```inputs```、```outputs```にはそれぞれ複数のテンソルを渡すことができ、入力や出力が複数あるネットワークの構築も容易に行うことができる。
+        * ```compile()```、```fit()```メソッドによる学習のための設定及び学習はSequential APIで実装する場合と同じ。
+* KerasによるCNNの実装
+    * これまではKerasでMLPを実装してきた。
+    * MNISTのデータセット(1つの画像が28×28のgrayscale)を使用していたため、入力層のニューロンは784個となっていた。
+    * 中間層を64個のニューロンで構成したため、入力層のニューロンから中間層へのニューロンへの重みは1ニューロンあたり64個となり、バイアス値を含め、65個のパラメータを最適化していた。
+    * これが、入力層のニューロンの数分パラメータが存在するため、ネットワーク全体では、65×784=50960個のパラメータを調整最適化することになる。
+    * 
 
 
 
@@ -733,10 +948,8 @@
 
 
 
-
-
-
-
+* 学習済みモデルの活用
+* よく使うKerasの機能
 
 
 
