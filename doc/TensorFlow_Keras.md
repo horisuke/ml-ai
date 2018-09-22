@@ -935,11 +935,206 @@
     * これまではKerasでMLPを実装してきた。
     * MNISTのデータセット(1つの画像が28×28のgrayscale)を使用していたため、入力層のニューロンは784個となっていた。
     * 中間層を64個のニューロンで構成したため、入力層のニューロンから中間層へのニューロンへの重みは1ニューロンあたり64個となり、バイアス値を含め、65個のパラメータを最適化していた。
-    * これが、入力層のニューロンの数分パラメータが存在するため、ネットワーク全体では、65×784=50960個のパラメータを調整最適化することになる。
-    * 
+    * これが、入力層のニューロンの数分パラメータが存在するため、ネットワーク全体では、65×784=50960個のパラメータを最適化することになる。
+    * 以下ではCIFAR-10というデータセット(1つの画像が32×32で色チャンネルが3)を使用する。
+    * よって、CIFAR-10の入力層のニューロンは32×32×3=3072個となる。
+    * 多層ニューラルネットワークでは画像サイズや色チャンネルが増えるほど、入力層のニューロンが増え、ネットワーク全体としては最適化するパラメータが増えると言える。
+    * CNN(Convolutional Neural Network：畳み込みニューラルネットワーク)は入力データ画像の性質を利用し、パラメータの数を削減することができる。
+    * CNNの構成要素 - 畳み込み層とは
+        * 画像に対して、カーネル(フィルタ)を適用し、画像の特徴量を抽出する役目を担う層のこと
+        * これにより、最適化が必要な重みのパラメータの数は画像サイズではなく、カーネルのサイズに依存することになる。
+        * つまり、ネットワーク全体として入力画像の大きさによって、パラメータ数が増大してしまうのを防ぐことができる。
+        * 畳み込み層では、入力データに対してカーネルと呼ばれる小さなテンソル(or行列)をスライドさせながら適用していく。
+        * 例として、入力データがを以下とする。
+            |0|1|1|0|1|
+            |:-:|:-:|:-:|:-:|:-:|
+            |0|0|1|1|0|
+            |0|0|1|1|1|
+            |0|1|0|0|0|
+            |1|0|1|1|0|
+        * カーネルを以下とする。
+            |  0  |  1  |  0  |
+            |:---:|:---:|:---:|
+            |-1|0|1|
+            |0|-1|0|
+        * まずカーネルを入力データの左上に適用する(要素同士の積を取り、その和を計算する)。
+            * 上記の場合、```0×0+1×1+1×0+0×(-1)+0×0+1×1+0×0+0×(-1)+1×0 = 0+1+0+0+0+1+0+0+0 = 2```となる。
+        * 次にカーネルを右に1つずらして同じように要素同士の積を取り、その和を計算する。
+            * この場合、```1×0+1×1+0×0+0×(-1)+1×0+1×1+0×0+1×(-1)+1×0 = 0+1+0+0+0+1+0+(-1)+0 = 1```となる。
+        * この操作を繰り返す。右端までカーネルが到達したら、左端に戻り行を1列下げて同様にカーネルを入力データに適用する。
+        * カーネルが入力データの右下に到達したら、各畳み込みで計算した要素ごとの積和が得られる。
+        * これを特徴マップと呼び、以下のようになる。
+            |  2  |  1  |  -2  |
+            |:---:|:---:|:---:|
+            |0|2|1|
+            |0|-1|0|
+        * 特徴マップの大きさは(入力画像の大きさ) - (カーネルの大きさ) + 1となる。
+            * 上記の例では、5 - 3 + 1 = 3なので、特徴マップは3×3となる。
+        * これはMLPと異なり、入力画像の大きさが大きくなったとしても、カーネルの大きさを調整することで、特徴マップの大きさを調整することができると言える。
+        * これにより、入力画像の大きさが増しても、そのままパラメータの数が増大してしまう問題を防止できることがわかる。
+    * CNNの構成要素 - プーリング層とは
+        * 画像を縮小する層のことで小さな位置変化に対して頑健になるような役目を担っている。
+        * プーリングにはいくつかの種類があるが、マックスプーリングが最もよく使われる。
+        * マックスプーリングは入力データをより小さな領域に分割し、各領域の最大値を取ってくることでデータを縮小する。
+            |  2  |  -1  |  -2  |  1  |
+            |:---:|:---:|:---:|:---:|
+            |-2|2|2|-2|
+            |1|0|2|1|
+            |0|-1|-2|-2|
+        * 上記のような入力データに対し、2×2の領域に分割してマックスプーリングを適用すると、以下の通りとなる。
+            |  2  |  2  |
+            |:---:|:---:|
+            |1|2|
+        * データが縮小されることにより、計算コストが軽減され、各領域内の位置の違いを無視することになるため、小さな一変化に対して頑健なモデルを構築することが可能となる。
+    * CIFAR-10にたいするKerasによるCNNの実装
+        * CIFAR-10は60000枚の画像(学習用データ50000枚、テストデータ10000枚)が含まれ、大きさが32×32で色チャンネルが3の画像からなるデータセットである。
+        * 各画像には「airplane」「automobile」「bird」「cat」「deer」「dog」「frog」「horse」「ship」「truck」の10種のラベルが1画像につき1つずつ付いている。
+        * 実装は以下の通り。
+        ```python
+        // keras-cnn-cifar10_01.py
+        from tensorflow.python.keras.datasets import cifar10
+        from tensorflow.python.keras.utils import to_categorical
+        from tensorflow.python.keras.models import Sequential
+        from tensorflow.python.keras.layers import Conv2D, MaxPool2D, Dropout, Flatten, Dense
+        from tensorflow.python.keras.callbacks import TensorBoard
 
+        # Download the dataset of CIFAR-10
+        (x_train, y_train), (x_test, y_test) = cifar10.load_data()
 
+        # Check the shapes of CIFAR-10 data to be downloaded.
+        print('x_train.shape: ', x_train.shape)  # (50000, 32, 32, 3)
+        print('x_test.shape: ', x_test.shape)    # (10000, 32, 32, 3)
+        print('y_train.shape: ', y_train.shape)  # (50000, 1)
+        print('y_test.shape: ', y_test.shape)    # (10000, 1)
 
+        # Preprocessing - exchange the scale of data
+        x_train = x_train/255
+        x_test = x_test/255
+
+        # Preprocessing - change class label to 1-hot vector
+        y_train = to_categorical(y_train, 10)
+        y_test = to_categorical(y_test, 10)
+
+        # Create the neural network
+        # Input layer + Convolutional layer 1st
+        model = Sequential()
+        model.add(
+            Conv2D(
+                filters=32,
+                input_shape=(32, 32, 3),
+                kernel_size=(3, 3),
+                strides=(1, 1),
+                padding='same',
+                activation='relu'
+            )
+        )
+
+        # Convolutional layer 2nd
+        model.add(
+            Conv2D(
+                filters=32,
+                kernel_size=(3, 3),
+                strides=(1, 1),
+                padding='same',
+                activation='relu'
+            )
+        )
+
+        # MaxPooling layer 1st
+        model.add(MaxPool2D(pool_size=(2, 2)))
+
+        # Dropout layer 1st
+        model.add(Dropout(0.25))
+
+        # Convolutional layer 3rd
+        model.add(
+            Conv2D(
+                filters=64,
+                kernel_size=(3, 3),
+                strides=(1, 1),
+                padding='same',
+                activation='relu'
+            )
+        )
+
+        # Convolutional layer 4th
+        model.add(
+            Conv2D(
+                filters=64,
+                kernel_size=(3, 3),
+                strides=(1, 1),
+                padding='same',
+                activation='relu'
+            )
+        )
+
+        # MaxPooling layer 2nd
+        model.add(MaxPool2D(pool_size=(2, 2)))
+
+        # Dropout layer 2nd
+        model.add(Dropout(0.25))
+
+        # Check the shape of output after Dropout layer 2nd
+        print(model.output_shape)
+
+        # Change the shape to 2-Demension for Dense layer
+        model.add(Flatten())
+        print(model.output_shape)
+
+        # Dense layer 1st
+        model.add(Dense(units=512, activation='relu'))
+        model.add(Dropout(0.5))
+
+        # Output layer
+        model.add(Dense(units=10, activation='softmax'))
+
+        # Learn the model
+        model.compile(
+            optimizer='adam',
+            loss='categorical_crossentropy',
+            metrics=['accuracy']
+        )
+        tsb = TensorBoard(log_dir='./logs')
+        history_model_cifar10 = model.fit(
+            x_train,
+            y_train,
+            batch_size=32,
+            epochs=20,
+            validation_split=0.2,
+            callbacks=[tsb]
+        )
+        ```
+        * CIFAR-10のデータセットはMNISTの場合と同様、データのダウンロードメソッドが用意されているので、```cifar10.load_data()```を使用する。
+        * ```x_train```、```x_test```は上述の通り、32×32の画像で色チャンネル3の画像がそれぞれ50000枚、10000枚含まれているため、```x_train.reshpae()```、```x_test.reshpae()```はそれぞれ(50000, 32, 32, 3)、(10000, 32, 32, 3)となっている。
+        * 次のデータの前処理を行う。
+        * ```x_train```、```x_test```はMNISTでは入力層のニューロンに合わせて28×28の2次元画像をreshapeし、784個の要素を持つ1次元に変換していたが、CIFAR-10のモデルは入力層を(32, 32, 3)としているため、ここでは正規化のみを行う。
+        * ```y_train```、```y_test```はMNISTと同様、1-hotベクトル化する。
+        * 次にSequential APIを使用し、ネットワークを構築する。
+        * 始めに畳み込み層を追加する。
+        * 画像のような2次元データに対する畳み込み層は```Conv2D()```レイヤーを以下のように引数を指定して使用する。
+            * filters=32　：　出力チャンネル数(特徴マップの数)
+            * kernel_size=(3, 3)　：　カーネルの大きさ
+            * strides=(1, 1)　：　1度にカーネルをずらす幅
+            * padding='same'　：　ゼロパディング設定
+            * activation='relu'　：　活性化関数
+        * ```kernel_size```、```strides```はどちらも大きくすることにより、特徴マップの大きさを小さくすることができる。
+        * ただし、```padding```は```'same'```を指定することにより、2次元データの周囲をゼロパディングさせ、入力データと特徴マップの大きさを同じにすることができる。また、```valid```を指定することでゼロパディングを無効にすることもできる。
+        * 2層目の畳み込み層は基本的に1層目と同じ引数を```Conv2D()```レイヤーに指定する。```Dence()```レイヤーと同様、2層目以降は```input_shape```は自動で計算されるので、省略可能となる。
+        * 次にプーリング層を追加する。
+        * 画像のような2次元データに対するプーリング層は```MaxPooling2D()```レイヤーを以下のように引数を指定して使用する。
+            * pool_size=(2, 2)　：　MaxPoolingする単位
+        * 次にドロップアウトレイヤーを追加する。
+        * ドロップアウトは層の中のニューロンのいくつかをランダムに無効にして学習を行う手法で、パラメータが多く表現力の高いネットワークの自由度を抑え、モデルの頑健性を高める目的で使用される。
+        * ドロップアウト層は```Dropout()```レイヤーを以下の引数を指定して使用する。
+            * rate=0.25　：　ドロップアウトするニューロンの割合
+        * さらに層を積み重ね、表現力を高めるために、畳み込み層を2層、プーリング層を1層、ドロップアウト層を1層を追加する。
+        * 最後に全結合層を追加する。
+        * ただし、全結合層は2次元のテンソルしか入力にすることができないため、多次元テンソルを2次元に変換する```Flatten()```レイヤーを全結合層の前に追加する。
+        * プーリング層の出力は```model.output_shape```で確認すると、(データ数, 縦, 横, チャンネル)=(None, 8, 8, 64)となっている一方、```Flatten()```レイヤーの出力は(None, 4096)になっている。
+        * つまり、```Flatten()```レイヤーで縦,　横, チャンネルの軸方向を1次元データに変換できることを意味する。
+        * ```Flatten()```での次元変換後、全結合層、ドロップアウト層(rate=0.5)を追加し、最後の全結合層を出力層として追加する。
+        * ```compile()```メソッドによる構築したモデルを学習を行なうための設定や```fit()```メソッドによる学習はMNISTの場合と同じ
+        * a
 
 
 
