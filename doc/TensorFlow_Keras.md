@@ -1134,20 +1134,518 @@
         * つまり、```Flatten()```レイヤーで縦,　横, チャンネルの軸方向を1次元データに変換できることを意味する。
         * ```Flatten()```での次元変換後、全結合層、ドロップアウト層(rate=0.5)を追加し、最後の全結合層を出力層として追加する。
         * ```compile()```メソッドによる構築したモデルを学習を行なうための設定や```fit()```メソッドによる学習はMNISTの場合と同じ
-        * a
-
-
-
-
-
-
-
-
 * 学習済みモデルの活用
+    * モデル構築時のハードル
+        * モデルの構築はシンプルなものであれば、前述のように比較的簡単に行える一方、現実世界のタスクに深層学習を適用する場合、より複雑なモデルが必要になってくることが多くある。
+            * カラー画像・高解像度画像を用いた分類問題、分類クラスが多い問題、高い精度が要求される問題など。
+        * モデルが複雑になると、モデルの構築において対処すべき課題がいくつか現れる。
+        * 例えば、分類クラスが多く、高精度な分類モデルを構築する場合、大量の学習用画像と正解ラベルが必要となる。
+        * 加えて、それらが整備されておらず、まとまったデータセットが存在しない場合は、学習データの作成を人手で行う必要があり、大変な労力が必要となる。
+        * また高解像度の画像を使って微小な差異を分類しようとした場合、ネットワークの規模も大きくなり、学習用計算リソースと計算時間が多く必要となる。
+        * これらのモデル構築時のハードルを下げるための対処策として、学習済みモデル(Pre-trained model)の活用が広く知られている。
+    * 学習済みモデルとは
+        * 事前に何らかのタスクに対して重みが学習されている深層学習モデルのこと。
+        * 大学や企業の研究グループが提案した学習済みモデルは最先端のネットワーク構造を用いていることが多く、高い精度が期待できる。
+        * 加えて、これらの学習済みモデルは大規模な学習データセットで学習済みのため、一般的な分類クラスの画像の分類タスクに用いる際は、精度的にも必要な分類クラスの数的にも十分である可能性もある。
+        * 学習済みモデルを活用することでモデルを1から構築することはなく、少ない労力で課題に対処することができる。
+    * ImageNetの学習データセット
+        * 学習済みモデルの学習データとして広く使われているデータセットとして、ImageNetがある。
+        * ImageNetは研究目的で収集されており、またプロジェクト名でもあるため、正解ラベルのアノテーション追加やコンペティションの開催もImageNetとして行われている。
+        * ImageNetには動物や植物、乗り物といった代表的なクラス分類と画像が含まれている。
+        * よって、犬と猫の分類タスクはこの学習済みモデルを使うだけで高精度に行うことが可能。
+        * また学習されたクラス分類に含まれない画像であっても、学習済みモデルの一部を学習し直すことで1からのモデルの構築に比べ、小さな手間で精度の高いモデルを構築できる。
+        * ImageNetの画像データセットを使った画像認識コンペティションILSVRC(ImageNet Large Scale Visual Recognition Challenge)が毎年開催されており、上位に入賞した手法は注目が集まる。
+        * 学習済みモデルのうち、著名なものは主にILSVRCでよい成績を収めたモデルである。
+        * ここで提案されるモデルは複雑で巨大だが、学習済みモデルとして利用する場合、必ずしもその構造全てを把握する必要はない。
+    * Kerasで利用できる学習済みモデル
+        * 代表的な学習済みモデルはKerasで簡単に呼び出し、利用することが可能。
+        * 利用可能な学習済みモデルは以下の通り(2018/03時点)
+            |モデル名    |提案者   |学習データ|特徴  |
+            |:---------:|:-------:|:-------:|------|
+            |VGG16      |Oxford   |ImageNet |2014年のILSVRCで優秀な成績を収めたモデル。隠れ層が16層ある。|
+            |VGG19      |Oxford   |ImageNet |VGG16の隠れ層を19層にしたモデル|
+            |InceptionV3|Google   |ImageNet |2014年のILSVRCで優勝したモデル。Inceptionモジュール導入が特徴隠れ層は22層ある。|
+            |Xception   |Google   |ImageNet |Francois Chollet(Keras作者)の提案モデルでInceptionの改良版。チャンネル方向と空間方向の畳み込みを分離し、精度向上と計算量削減を実現|
+            |ResNet50   |Microsoft|ImageNet |2015年のILSVRCの分類問題、物体検知部門で優勝したモデル。Residualブロックの導入により、残差の学習を行うことでより深いネットワーク構造を実現|
+    * 学習済みモデルをそのまま使用
+        * ここではVGG16というOxford大学のVGG(Visual Geometry Group)が提案したモデルを使用する。
+        * 分類したい画像がImageNetに含まれる画像クラスであれば、VGG16モデルをそのまま使用できる。
+        * 具体的には犬の画像と猫の画像を判別するタスクを考える。
+        * ImageNetに犬と猫の画像は含まれており、VGG16では既に大量のデータを使ってこれらの特徴量を学習済みの状態になっている。
+        * このような場合、新たな学習は不要で分類したい画像をVGG16に入力して予測結果を出力することで入力画像が犬か猫かの確率を計算することができる。
+        * VGG16をそのまま使った犬と猫の画像を認識する実装は以下の通り。
+        ```python
+        // keras-vgg16_pre-trained-imagenet_01.py
+        from tensorflow.python.keras.applications.vgg16 import VGG16, preprocess_input, decode_predictions
+        from tensorflow.python.keras.preprocessing.image import load_img, img_to_array
+        import numpy as np
+
+        # Download VGG16 (Pre-trained model).
+        model = VGG16()
+
+        # Check the summary of VGG16 to be downloaded.
+        model.summary()
+
+        # Load and re-size the images for network input
+        img_dog = load_img('img/dog.jpg', target_size=(224, 224))
+        img_cat = load_img('img/cat.jpg', target_size=(224, 224))
+
+        # Exchange dog/cat image from Pillow data format to numpy.ndarray.
+        arr_dog = img_to_array(img_dog)
+        arr_cat = img_to_array(img_cat)
+
+        # Centering img color channel and change the order of them
+        arr_dog = preprocess_input(arr_dog)
+        arr_cat = preprocess_input(arr_cat)
+
+        # Merge the img for network input as array.
+        arr_input = np.stack([arr_dog, arr_cat])
+
+        # Check the shape of input data.
+        print('Shape of arr_input:', arr_input.shape)
+
+        # Prediction of input images.
+        probs = model.predict(arr_input)
+        print('Shape of probs:', probs.shape)
+        print(probs)
+
+        # Decode prediction to class name and pick up 1-5 classes by high percentage order.
+        results = decode_predictions(probs)
+        print(results[0])
+        print(results[1])
+        ```
+        * VGG16の学習済みモデルは```tensorflow.python.keras.applications.vgg16```からimportでき、```model = VGG16()```とするだけで、学習済みVGG16をインスタンス化できる。
+            * モデルは~/.keras/models/vgg16_weights_tf_dim_ordering_tf_kernels.h5として保存される(550MB程度)。
+        * ```model.summary()```でモデルの概要が出力され、確認することができる。出力結果は以下。
+        ```
+        _________________________________________________________________
+        Layer (type)                 Output Shape              Param #   
+        =================================================================
+        input_1 (InputLayer)         (None, 224, 224, 3)       0         
+        _________________________________________________________________
+        block1_conv1 (Conv2D)        (None, 224, 224, 64)      1792      
+        _________________________________________________________________
+        block1_conv2 (Conv2D)        (None, 224, 224, 64)      36928     
+        _________________________________________________________________
+        block1_pool (MaxPooling2D)   (None, 112, 112, 64)      0         
+        _________________________________________________________________
+        block2_conv1 (Conv2D)        (None, 112, 112, 128)     73856     
+        _________________________________________________________________
+        block2_conv2 (Conv2D)        (None, 112, 112, 128)     147584    
+        _________________________________________________________________
+        block2_pool (MaxPooling2D)   (None, 56, 56, 128)       0         
+        _________________________________________________________________
+        block3_conv1 (Conv2D)        (None, 56, 56, 256)       295168    
+        _________________________________________________________________
+        block3_conv2 (Conv2D)        (None, 56, 56, 256)       590080    
+        _________________________________________________________________
+        block3_conv3 (Conv2D)        (None, 56, 56, 256)       590080    
+        _________________________________________________________________
+        block3_pool (MaxPooling2D)   (None, 28, 28, 256)       0         
+        _________________________________________________________________
+        block4_conv1 (Conv2D)        (None, 28, 28, 512)       1180160   
+        _________________________________________________________________
+        block4_conv2 (Conv2D)        (None, 28, 28, 512)       2359808   
+        _________________________________________________________________
+        block4_conv3 (Conv2D)        (None, 28, 28, 512)       2359808   
+        _________________________________________________________________
+        block4_pool (MaxPooling2D)   (None, 14, 14, 512)       0         
+        _________________________________________________________________
+        block5_conv1 (Conv2D)        (None, 14, 14, 512)       2359808   
+        _________________________________________________________________
+        block5_conv2 (Conv2D)        (None, 14, 14, 512)       2359808   
+        _________________________________________________________________
+        block5_conv3 (Conv2D)        (None, 14, 14, 512)       2359808   
+        _________________________________________________________________
+        block5_pool (MaxPooling2D)   (None, 7, 7, 512)         0         
+        _________________________________________________________________
+        flatten (Flatten)            (None, 25088)             0         
+        _________________________________________________________________
+        fc1 (Dense)                  (None, 4096)              102764544
+        _________________________________________________________________
+        fc2 (Dense)                  (None, 4096)              16781312  
+        _________________________________________________________________
+        predictions (Dense)          (None, 1000)              4097000   
+        =================================================================
+        Total params: 138,357,544
+        Trainable params: 138,357,544
+        Non-trainable params: 0
+        _________________________________________________________________
+        ```
+        * VGG16は入力層の画像サイズは224×224、出力層のサイズが1000になっていることがわかる。出力層のサイズは1枚の画像入力に対し、予測を最大1000種出すことができ、その分類確率を出力できることを意味している。
+        * 次に入力画像を準備する。
+        * Open Image Datasetから犬と猫の画像を取得する。2018/09/23時点でDatasetはV4になっている。
+            * https://github.com/openimages
+            * https://storage.googleapis.com/openimages/web/index.html
+        * ここでは、以下のデータをそれぞれ入力データとする(共にthumbnailを選択)。
+            * 犬：https://c2.staticflickr.com/1/101/275168271_0c0ef573fa_z.jpg
+            * 猫：https://c2.staticflickr.com/8/7551/15933735682_3ae68397d3_z.jpg
+        * これらをダウンロードし、それぞれdog.jpg、cat.jpgとして保存する。
+        * 作業ディレクトリにimgディレクトリを作成し、配下に両画像を配置する。
+        * 次に入力画像をネットワークに入力するための前処理を行う。
+        * ```load_img()```メソッドで犬と猫の画像をloadする。同時に引数```target_size```でサイズを指定することにより、画像のリサイズが可能。ここではVGG16の入力サイズに合うように(224, 224)を指定する。
+            * 実行すると以下のようなエラーが出る。
+            ```
+            img_dog = load_img('img/dog.jpg', target_size=(224, 224))
+              File "/home/*****/*****/anaconda3/envs/*****/lib/python3.6/site-packages/tensorflow/python/keras/preprocessing/image.py", line 432, in load_img
+                raise ImportError('Could not import PIL.Image. '
+            ImportError: Could not import PIL.Image. The use of `array_to_img` requires PIL.
+            ```
+            * array_to_img()のためにPIL(Python Image library)が必要だが、python3.x系のPILは存在しない。
+            * 代わりにPILからforkされて開発されているPillowをインストールすることで解決。
+        * loadした画像はPillowのデータフォーマットとなっているため、そのままモデルの入力にはできず、画像を一般的な数値データとして表現し直す必要がある。
+        * ここでは、```img_to_array()```メソッドに```img_dog```、```img_cat```を渡し、numpy.ndarrayクラスのインスタンスに変換、それぞれ```arr_dog```、```arr_cat```に格納する。
+        * 次にVGG16の入力に適した形に変換するため、```arr_dog```、```arr_cat```に対し、```preprocess_input()```メソッドを適用する。
+        * このメソッドでは中心化(入力値から学習時の画像の平均値を引き、平均が0になるような変換)とカラーチャンネル順序の変更(RGB→BGR)を行なう。
+        * 最後に```stack()```メソッドで入力画像2枚を1つの配列```arr_input```にする。通常、入力画像はよりたくさんあり、1つの配列にしてモデルに入力するのが一般的。
+        * ```arr_input```は```shape```プロパティで大きさを確認でき、ここでは(2, 224, 224, 3)となる。
+        * 次に準備した入力画像の配列を```predict()```メソッドに渡し、予測(推論)結果を算出し、結果を```probs```に格納する。
+        * ```probs```の大きさは```probs.shape```で確認でき、ここでは(2, 1000)となっている。```probs```を出力すると以下の通り。
+        ```
+        [[2.9331243e-06 7.4308993e-08 1.6896995e-06 ... 4.8771597e-07 1.2897861e-05 2.8120250e-05]
+         [3.6554283e-07 4.8101856e-06 2.0250478e-05 ... 1.6553813e-07 7.5099291e-05 1.6115393e-03]]
+        ```
+        * 各画像を1000クラスのラベルに対して予測し、そのクラスごとの確率が要素として格納されている。
+        * 確率の高いクラスを判別しやすくするために```decode_predictions()```を使い、(クラスID, クラス名, クラスの確率)をタプルにし、確率の高い上位5クラスのみを出力する。
+            * このタイミングでID, クラス名などが記述されているindexファイルがダウンロードされ、~/.keras/models/imagenet_class_index.jsonとして保存される。
+        * これらの処理の結果、以下の通り、resultsの1行目は1番目の画像(犬の画像)の予測のうち、確率が高いクラスが出力される。
+        ```
+        [('n02108422', 'bull_mastiff', 0.27267095), ('n02093428', 'American_Staffordshire_terrier', 0.14264221), ('n02109047', 'Great_Dane', 0.12273283), ('n02106662', 'German_shepherd', 0.103157416), ('n02106550', 'Rottweiler', 0.10209473)]
+        ```
+        * resultsの2行目は以下の通り、2番目の画像(猫の画像)の予測のうち、確率が高いクラスが出力される。
+        ```
+        [('n02124075', 'Egyptian_cat', 0.48060524), ('n02127052', 'lynx', 0.16764799), ('n02123045', 'tabby', 0.07142156), ('n02123597', 'Siamese_cat', 0.030335756), ('n02971356', 'carton', 0.030261986)]
+        ```
+        * いずれの画像も上位のクラスはそれぞれ犬種、猫種が上がっており、正しく予測できていると言える。
+        * 犬種、猫種単位ではなく、「犬」、「猫」といったより大きな粒度で分類するためには、予測確率をまとめる工夫が必要となる。
+    * 学習済みモデルの一部を学習し直す(転移学習)
+        * 学習済みモデルを新たな分類タスクに適用することを考えると、例えば、「寺」や「神社」といった画像は分類対象のクラス分類がImageNetに存在しない。
+        * よって、そのままでは予測の出力として、「寺」や「神社」が出力されることはない。
+        * VGG16はこれらの画像を学習しておらず、それらをどう区別していいか判断できない状態と言える。
+        * このような場合、新たな学習対象(「寺」や「神社」)の画像を用意し、モデルを学習し直す必要がある。
+        * ここで、1から「寺」や「神社」を含む学習データを使って学習するよりも、学習済みモデルを使って学習し直す方が十分なメリットがある。
+        * その理由と主に2つが挙げられる。
+            * ネットワーク構造の大部分をそのまま使用でき、独自のネットワーク定義が不要。
+            * VGG16など既に膨大な数のクラスを正しく識別できる特徴量抽出器を持つモデルは「寺」や「神社」を学習していなくても、他クラスの区別の際に「寺」と「神社」の差異を見分けるのに有効な特徴をすでに学習している可能性があること。
+                * 1から重みを学習するよりも少ないデータと時間でよい精度を出せることが期待できると言える。
+        * 上記のように学習済みモデルを利用して別タスクに適用することを転移学習(Transfer Learning)と呼ぶ。
+        * 以下では学習済みモデルVGG16を転移学習し、「寺」と「神社」の画像を分類できるようにする。
+        * VGG16は1つの入力画像に対し、1000クラス分の確率を出力できるようになっており、1000次元ベクトルが出力される。
+        * 今回は入力画像が「寺」かどうかを分類できれば良いので、出力数を1つにする(「神社」かどうかは1から「寺」の確率を引いて算出)。
+        * VGG16を最終層を含めない状態で呼び出し、そこに「寺」か「神社」という新しい2値分類に対応させるための調整を担う全結合層と1つの出力を行う出力層を追加する。
+        * 実装は以下の通り。
+        ```python
+        // keras-vgg16_transfer-learning_temple_shrine_01.py
+        from tensorflow.python.keras.applications.vgg16 import VGG16, preprocess_input
+        from tensorflow.python.keras.models import Sequential
+        from tensorflow.python.keras.layers import Dense, Dropout, Flatten
+        from tensorflow.python.keras.optimizers import SGD
+        from tensorflow.python.keras.preprocessing.image import ImageDataGenerator
+        import os
+        from datetime import datetime
+        import json
+        import pickle
+        import math
+        from tensorflow.python.keras.callbacks import ModelCheckpoint, CSVLogger
+        from utils import load_random_imgs, show_test_samples
+
+        # Convert VGG16 model to Sequential model.
+        # trainable -> false in first 15 layers.
+        # Add Flatten, Dense for learning, Dropout, and Dense for output.
+        def build_transfer_model(vgg16):
+            model = Sequential(vgg16.layers)
+
+            for layer in model.layers[:15]:
+                layer.trainable = False
+
+            model.add(Flatten())
+            model.add(Dense(256, activation='relu'))
+            model.add(Dropout(0.5))
+            model.add(Dense(1, activation='sigmoid'))
+
+            return model
+
+        # Download and create VGG16 model without Output layer.
+        vgg16 = VGG16(include_top=False, input_shape=(224, 224, 3))
+
+        # Check the summary VGG16 model without Output layer.
+        vgg16.summary()
+
+        # Create model as Sequential model from VGG16 by `build_transfer_model` method.
+        model = build_transfer_model(vgg16)
+
+        # Compile the model.
+        model.compile(
+            loss='binary_crossentropy',
+            optimizer=SGD(lr=1e-4, momentum=0.9),
+            metrics=['accuracy']
+        )
+
+        # Check the model summary after adding new layers.
+        model.summary()
+
+        # Create image generator.
+        idg_train = ImageDataGenerator(
+            rescale=1/255.,
+            shear_range=0.1,
+            zoom_range=0.1,
+            horizontal_flip=True,
+            preprocessing_function=preprocess_input
+        )
+
+        # Create iterator for training from image generator.
+        img_itr_train = idg_train.flow_from_directory(
+            'img/shrine_temple/train',
+            target_size=(224, 224),
+            batch_size=16,
+            class_mode='binary'
+        )
+
+        # Create iterator for validation from image generator.
+        img_itr_validation = idg_train.flow_from_directory(
+            'img/shrine_temple/validation',
+            target_size=(224, 224),
+            batch_size=16,
+            class_mode='binary'
+        )
+
+        # Make directory for saving model, class labels, loss, and weights.
+        model_dir = os.path.join(
+            'models',
+            datetime.now().strftime('%y%m%d_%H%M')
+        )
+        os.makedirs(model_dir, exist_ok=True)
+        print('model_dir:', model_dir)
+        dir_weights = os.path.join(model_dir, 'weights')
+        os.makedirs(dir_weights, exist_ok=True)
+
+        # Save the model to model.json.
+        model_json = os.path.join(model_dir, 'model.json')
+        with open(model_json, 'w') as f:
+            json.dump(model.to_json(), f)
+
+        # Save the class label info to classes.pkl.
+        model_classes = os.path.join(model_dir, 'classes.pkl')
+        with open(model_classes, 'wb') as f:
+            pickle.dump(img_itr_train.class_indices, f)
+
+        # Define and calculate each value for learning.
+        batch_size = 16
+        step_per_epoch = math.ceil(
+            img_itr_train.samples/batch_size
+        )
+        validation_steps = math.ceil(
+            img_itr_validation.samples/batch_size
+        )
+
+        # Create callback of the model of weights.
+        cp_filepath = os.path.join(dir_weights, 'ep_{epoch:02d}_ls_{loss:.1f}.h5')
+        cp = ModelCheckpoint(
+            cp_filepath,
+            monitor='loss',
+            verbose=0,
+            save_best_only=False,
+            save_weights_only=True,
+            mode='auto',
+            period=5
+        )
+
+        # Create callback of the value of loss.
+        csv_filepath = os.path.join(model_dir, 'loss.csv')
+        csv = CSVLogger(csv_filepath, append=True)
+
+        # Learn the model by fit_generator() method.
+        n_epoch = 30
+        history = model.fit_generator(
+            img_itr_train,
+            steps_per_epoch=step_per_epoch,
+            epochs=n_epoch,
+            validation_data=img_itr_validation,
+            validation_steps=validation_steps,
+            callbacks=[cp, csv]
+        )
+
+        # Predict the test data using the model to be learned.
+        test_data_dir = 'img/shrine_temple/test/unknown'
+        x_test, true_labels = load_random_imgs(
+            test_data_dir,
+            seed=1
+        )
+        x_test_preproc = preprocess_input(x_test.copy())/255.
+        probs = model.predict(x_test_preproc)
+        print(probs)
+
+        # Display the test sample data.
+        show_test_samples(
+            x_test, probs,
+            img_itr_train.class_indices,
+            true_labels
+        )
+        ```
+        * ```VGG16```クラスのインスタンスを作成時に```include_top=False```を指定し、出力層を含まない形にする。
+        * また、```include_top=False```をFalseにしたことにより、入力のshapeとして、```input_shape=(224, 224, 3)```を指定可能となる。
+            * このタイミングで~/.keras/models/vgg16_weights_tf_dim_ordering_tf_kernels_notop.h5がダウンロードされる。(58MB程度)。
+        * この時点で```vgg16.summary()```でモデルのサマリを確認すると、以下の通り、最後の全結合層ネットワーク(fc1, fc2)とプーリングレイヤーからDense全結合レイヤーを結ぶFlattenレイヤーが含まれていないことがわかる。
+        ```
+        _________________________________________________________________
+        Layer (type)                 Output Shape              Param #   
+        =================================================================
+        input_1 (InputLayer)         (None, 224, 224, 3)       0         
+        _________________________________________________________________
+        block1_conv1 (Conv2D)        (None, 224, 224, 64)      1792      
+        _________________________________________________________________
+        block1_conv2 (Conv2D)        (None, 224, 224, 64)      36928     
+        _________________________________________________________________
+        block1_pool (MaxPooling2D)   (None, 112, 112, 64)      0         
+        _________________________________________________________________
+        block2_conv1 (Conv2D)        (None, 112, 112, 128)     73856     
+        _________________________________________________________________
+        block2_conv2 (Conv2D)        (None, 112, 112, 128)     147584    
+        _________________________________________________________________
+        block2_pool (MaxPooling2D)   (None, 56, 56, 128)       0         
+        _________________________________________________________________
+        block3_conv1 (Conv2D)        (None, 56, 56, 256)       295168    
+        _________________________________________________________________
+        block3_conv2 (Conv2D)        (None, 56, 56, 256)       590080    
+        _________________________________________________________________
+        block3_conv3 (Conv2D)        (None, 56, 56, 256)       590080    
+        _________________________________________________________________
+        block3_pool (MaxPooling2D)   (None, 28, 28, 256)       0         
+        _________________________________________________________________
+        block4_conv1 (Conv2D)        (None, 28, 28, 512)       1180160   
+        _________________________________________________________________
+        block4_conv2 (Conv2D)        (None, 28, 28, 512)       2359808   
+        _________________________________________________________________
+        block4_conv3 (Conv2D)        (None, 28, 28, 512)       2359808   
+        _________________________________________________________________
+        block4_pool (MaxPooling2D)   (None, 14, 14, 512)       0         
+        _________________________________________________________________
+        block5_conv1 (Conv2D)        (None, 14, 14, 512)       2359808   
+        _________________________________________________________________
+        block5_conv2 (Conv2D)        (None, 14, 14, 512)       2359808   
+        _________________________________________________________________
+        block5_conv3 (Conv2D)        (None, 14, 14, 512)       2359808   
+        _________________________________________________________________
+        block5_pool (MaxPooling2D)   (None, 7, 7, 512)         0         
+        =================================================================
+        Total params: 14,714,688
+        Trainable params: 14,714,688
+        Non-trainable params: 0
+        _________________________________________________________________
+        ```
+        * 次に上記のVGG16モデルを変更していくが、変更を簡単にするために一旦、VGG16モデルをSequentialモデルとして生成する。
+        * ```build_transfer_model()```メソッドを定義し、その中で```Sequential()```クラスに```vgg16.layers```を渡すことで生成できる。
+        * 今回の重みの再学習(重みの更新)は新たに追加する層と既存の出力層に近い部分にとどめることにするため、入力層から15層分は```layer.trainable=False```として、学習しないよう設定する。
+        * 次に以下の通り、新しい層を追加する。
+            * プーリング層を全結合層に展開するためのFlattenレイヤー
+            * 重みを学習する全結合レイヤー
+            * 頑健性を高めるためのDropoutレイヤー
+            * 1クラス分の確率を出力するための出力層レイヤー
+        * 次にモデルを以下の通り指定し、compileする。
+            * loss='binary_crossentropy'
+            * optimizer=SGD(lr=1e-4, momentum=0.9)
+            * metrics=['accuracy']
+        * 新たに学習するのは、2値分類タスクなので、各パラメータはそれに適したものを指定する。
+        * 損失関数は```'binary_crossentropy'```とし、```optimizer```はmomentum SGDとし、lr(学習率)は小さい値を指定し、一度に重みを大きく修正しないようにする。
+        * またこれまでと同様、学習履歴に精度を含めるため、```metrics=['accuracy']```を指定する。
+        * 次に学習用画像をミニバッチ単位で読み込むためのジェネレータ```idg_train```を```ImageDataGenerator```から使って生成する。
+        * ```ImageDataGenerator```は様々な引数を指定することで画像のスケール変換やデータ拡張が可能。
+            * ```ImageDataGenerator```でできることは後述。
+        * 次にジェネレータ```idg_train```から実際にデータを読み込むためのイテレータを生成する。また、イテレータは学習用として使用する```img_itr_train```と検証用として使用する```img_itr_validation```をそれぞれ生成する。
+        * ```flow_from_directory()```メソッドを使用することで指定したディレクトリから```batch_size```に指定した数だけ画像を読み込み、1ミニバッチ分の画像と正解ラベルを返すイテレータを生成できる。
+        * 他にも```flow_from_directory()```の引数として、```target_size```、```class_mode```を指定でき、それぞれ返す画像の大きさ、正解ラベルの種類を設定できる。
+        * 次に学習結果のモデルや損失を保存するためのディレクトリを生成する。
+        * ```os.path.join()```メソッドを使用し、'models/yymmdd_hhmm'というパスを生成する。
+            * 引数として順に指定した順に"/"区切りのパスの生成が可能。
+        * 生成したパスを```os.makedirs()```メソッドに渡し、ワーキングディレクトリ以下にディレクトリを作成する。
+            * ```exist_ok=True```を引数として指定することにより、既に指定したパスが存在していても、エラーとなることなく実行可能となる。
+        * 同様にモデルの重みを保存するディレクトリ'weights'を'models/yymmdd_hhmm'以下に作成する。
+        * 次に作成したディレクトリにネットワーク構造と学習画像のクラスラベル(寺の画像と神社の画像のどちらを0, 1とするかのラベル)を保存する。
+        * ネットワークは保存先として'models/yymmdd_hhmm'のディレクトリ以下に'model.json'を生成し、保存する。
+        * ```model.to_json()```で```model```インスタンスをjson化する。
+        * ```model.to_json()```を```json.dump()```に渡すことでインスタンスがシリアライズされ、'model.json'にファイルとして保存できる。
+        * 画像のクラスラベルは保存先として'models/yymmdd_hhmm'のディレクトリ以下に'classes.pkl'を生成し、保存する。
+        * イテレータ```img_itr_train```の```class_indices```プロパティで寺の画像、神社の画像のクラスラベルが取得できる。
+            * クラスラベルの値は```ImageDataGenerator```が自動で決定する。
+        * ```img_itr_train.class_indices```を```pickle.dump()```に渡すことでクラスラベルの文字列がシリアライズされ、'classes.pkl'にファイルとして保存できる。
+        * 次に学習時に必要な以下の値を計算・設定する。
+            * batch_size = 16　：　1度に学習する画像データ数
+            * steps_per_epoch　：　1エポックあたりの学習ステップ数(学習データの数をバッチサイズで割った数)
+            * validation_steps　：　検証ステップ数(検証データをバッチサイズで割った数)
+        * モデルの重みをエポックごとに保存するためにCallbacksを使用する。
+        * まず、Callbacksで保存する先のパスを'weights'ディレクトリ以下に```os.path.join()```で生成する。
+        * 保存先のファイルは```'ep_{epoch:02d}_ls_{loss:.1f}.h5'```とし、epochとlossの小数点第1位までの値をその時の時点での値を取得してファイル名にする。
+        * ```keras.callbacks.ModelCheckPoint()```クラスをインスタンス化し、以下の引数を指定して、各エポック終了後にモデルをファイルに保存するためのcallbackを生成する。
+            * filepath=cp_filepath　：　モデルの保存先ファイルパス
+            * monitor='loss'　：　監視する値としてlossを指定
+            * verbose=0　：　ログ出力モード
+            * save_best_only=False　：　Falseを設定し、監視している値によって、最良モデルの上書きを許容する
+            * save_weights_only=True　：　Trueを設定し、モデルの重みのみを保存する
+            * mode='auto'　：　save_best_only=Trueの場合の最良モデル上書きの設定
+            * period=5　：　モデルの保存を行なう間隔(エポック数)
+        * 次に学習時の損失を保存するパスを'models/yymmdd_hhmm'ディレクトリ以下に```os.path.join()```で生成し、保存先のファイルを```loss.csv```とする。
+        * 学習時の損失の値をエポックごとに取得し、保存するために```CSVLogger```クラスを以下の引数を指定してインスタンス化する。
+            * filename=csv_filepath　：　保存先csvファイルへのパス
+            * append=True　：　Trueを設定し、ファイルが存在する場合はそのファイルに追記する
+        * これまでの学習履歴の出力ファイル・ディレクトリ構成は以下の通り。
+        ```
+        180928_0053
+          ┗━━━ weights
+          ┃　　　┣━━ ep_05_ls_0.3.h5
+          ┃　　　┣━━ ep_10_ls_0.3.h5
+          ┃　　　┣━━ ep_15_ls_0.2.h5
+          ┃　　　┣━━ ep_20_ls_0.2.h5
+          ┃　　　┣━━ ep_25_ls_0.2.h5
+          ┃　　　┗━━ ep_30_ls_0.1.h5
+          ┣━━━ classes.pkl
+          ┣━━━ loss.csv
+          ┗━━━ model.json
+        ```
+        * 次に実際に学習を行う。ここでは、```fit_generator()```メソッドに以下の引数を指定する。
+            * generator=img_itr_train　：　学習データのジェネレータ
+            * steps_per_epoch=steps_per_epoch　：　1エポックあたりの学習ステップ数(エポックで使用する学習データ数)
+            * epochs=n_epoch　：　学習のエポック数
+            * validation_data=img_itr_validation　：　検証データのジェネレータ
+            * validation_steps=validation_steps　：　エポックあたりの検証ステップ数)(エポックで使用する検証データ数)
+            * callbacks=[cp, csv]　：　callbackのインスタンスリスト
+        * ```fit()```メソッドが固定回数でデータセットを反復して学習する場合に使用するのに対し、```fit_generator()```メソッドはジェネレータでバッチごとに生成されたデータを使って学習する場合に使用する。
+        * ```callbacks```にはモデルと損失の値を保存するcallbakのインスタンスを設定し、エポックごとの状態を保存する。
+        * 学習が終わったら、学習したモデルで予測を行う。
+        * まず、テストデータを```load_random_imgs()```メソッドでランダムに読み出す。
+        * 読みだしたデータは```preprocess_input()```に渡し、データの中心化(入力値から学習時の画像の平均値を引き、平均が0になるような変換)とカラーチャンネル順序の変更(RGB→BGR)を行なう。
+        * 最後にテストデータを```predict()```メソッドに渡す。
+        * ```predict()```メソッドの返り値はその画像が「寺」である確率が以下のように取得できる。
+        ```
+        [[0.6787312 ]
+         [0.0381932 ]
+         [0.15954852]
+         [0.9959889 ]
+         [0.02959609]
+         [0.29348594]
+         [0.02012098]
+         [0.9843722 ]]
+        ```
 * よく使うKerasの機能
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
 ## 参考
-* 現場で使える！TensorFlow開発入門 Kerasによる深層学習モデル構築手法
-https://www.shoeisha.co.jp/book/detail/9784798154121
+1. 現場で使える！TensorFlow開発入門 Kerasによる深層学習モデル構築手法
+    * https://www.shoeisha.co.jp/book/detail/9784798154121
+2. Kerasに「PILが無い」と怒られた場合の対策
+    * https://qiita.com/YankeeDeltaBravo225/items/6968c376a491b6171671
+3. ディレクトリ構成図を書くときに便利な記号
+    * https://qiita.com/paty-fakename/items/c82ed27b4070feeceff6
