@@ -147,9 +147,52 @@
 * AWSマネージメントコンソールでLambda関数を作る前に必要なIAM(Identify and Access Management)ユーザとIAMロールを作成しておく必要がある。
 
 ######2-3-1. IAMユーザとIAMロール
+* AWSアカウント作成時のメールアドレスとパスワードはルートアカウント(管理者アカウント)の認証情報である。
+* この認証情報でサインインした場合、AWS全てのリソースにアクセスできるため、通常利用は推奨されていない。
+* 通常、IAMユーザというアカウントを利用する。
+* IAMユーザはAWSリソースに対するユーザ認証と用途ごとに細かいリソースへのアクセス権限を適用できる。
+* ここではLambda関数を作成・実行・操作するためのIAMユーザを用意する。
+* IAMロールはAWSリソースへのアクセス権限のことで、管理者がロールにアクセス権限を付与し、そのロールをIAMユーザに適用する。
+* これにより、IAMユーザはAWSのリソースに適切にアクセスできるようになる。
+* また、Lambda関数(AWSリソース)にロールを適用することで、Lambda関数から適切にAWSサービスやリソースにアクセスできるようになる。
+* IAMユーザにはアクセスポリシーを付与する。アクセスポリシーには各種権限が含まれている。
+* Lambda関数にはIAMロールを付与する。IAMロールはアクセスポリシーを付与することで作成する。同様にアクセスポリシーには各種権限が含まれている。
+
+######2-3-2. Lambdaの利用に必要なアクセス権
+* Lambdaを利用する場合、以下の3つのアクセス権が関与する。
+* Lambda関数の作成権限：開発者用のIAMユーザの権限
+    * 開発者はAWSマネジメントコンソールやAWS CLIなどを用い、AWS上にLambda関数を作成する権限「lambda:CreateFunction」が必要である。
+    * この権限がない開発者はLambda関数が作成できない。
+* Lambda関数の実行権限：開発者用のIAMユーザやイベント元の権限
+    * Lambda関数を実行する権限は「lambda:InvokeFunction」であり、開発者が主導でLambda関数を実行する場合、開発者にこの権限が必要となる。
+* Lambda関数からの操作権限：Lambda関数の権限
+    * Lambda関数はログをCloudWatchLogsへ書き込むため、最低限CloudWatchLogsへの書き込み権限が必要。
+    * 具体的には「logs:PutLogEvents」、「logs:CreateLogStream」、「logs:CreateLogGroup」の権限が必要。
+    * Lambda関数にて、例えばS3を操作したり、DynampDBを操作したりする場合は、それぞれリソースへのアクセス権が必要となる。
+
+######2-3-3. 既存の管理ポリシーを適用する
+* これらのアクセス権をひとつずつ設定するのは煩雑なため、アクセス権の設定は通常、既存のアクセスポリシーを適用する。
+* 既存のアクセスポリシーを適用するのは、大雑把な感じがあるが、簡単にIAMユーザやIAMロールを構成できる。
+* 開発者が手動で実行するLambda関数を作る場合、以下のように構成する。
+    * 開発者に割り当てるIAMユーザ
+        * 通常、「AWSLambdaFullAccess」ポリシーを適用する。
+        * このポリシーの適用により、Lambda関数を作成・実行が可能となる。
+        * また、このポリシーにはLambda関数と一緒に使うことの多い、DynamoDBやS3などへの書き込み権限も付与されている。
+    * Lambda関数に割り当てるIAMロール
+        * 通常、「AWSLambdaBasicExecutionRole」ポリシーを適用する。
+        * このポリシーの適用により、Lambda関数にCloudWatchLogsへの書き込みアクセス権(「logs:PutLogEvents」、「logs:CreateLogStream」、「logs:CreateLogGroup」)が付与される。
+
+######2-3-4. IAMユーザとIAMロールを作成する
+* 開発者のIAMユーザを作成
+    * 「AWSLambdaFullAccess」を適用したIAMユーザを作成する。
+    * ★Appendix A
+* Lambdaの実行ロールを作成
+    * 「AWSLambdaBasicExecutionRole」を適用したIAMロールを作成する。
+    * 作成するロール名は「role-lambdaexec」とする。
+    * ★Appendix B
+
+#####2-4. Lambda関数の作成
 * aa
-
-
 
 
 
