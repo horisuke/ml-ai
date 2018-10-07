@@ -1626,6 +1626,146 @@
          [0.9843722 ]]
         ```
 * よく使うKerasの機能
+    * ここまで触れていないKerasの機能について
+    * Kerasレイヤー(```tensorflow.python.keras.layers```)
+        * Dropoutレイヤー
+            * ネットワーク内の一部のユニットを無効にする機能を提供。
+            * これにより、特にパラメータが多く表現力の高いネットワークの自由度を抑えたり、過学習を抑えることで、最終的なモデルの精度を向上させる役割を果たす。
+            * ドロップアウトはシンプルだが、精度を向上させる強力なアプローチの1つ。
+            * Dropoutレイヤーでの処理としては、入力値から一定の比率(引数```rate```で指定)分だけランダムに選択し、その入力値を0にしている。
+            * ただし、過度なドロップアウトは学習不足や学習速度の低下を招く可能性がある。
+            * 引数```rate```は0.2～0.5に設定することが一般的。
+            * ドロップアウトは学習時のみ適用され、推論時は全てのユニットを用いて予測値が計算される。
+        * BatchNormalizationレイヤー
+            * バッチごとに次のレイヤーへの入力値を正規化(平均0, 分散1への正規化)する機能を提供。
+            * 上述のコードでも入力層への入力データを255で割る(=最大値255, 最小値0への正規化)ことで入力値が[0, 1]に収まるようにするための正規化を行っていた。
+            * これは正規化により学習が進みやすいことが知られているためである。
+            * 多層ニューラルネットワークの場合、入力層だけでなく、中間層でも正規化を行うことで多くの場合、学習が安定し、精度が向上することが知られている。
+            * 学習が安定すると学習率(learning rate)を大きくとることができるため、学習速度が向上すると考えられる。
+            * また、BatchNormalizationには正則化の機能があるため、Dropoutなどを追加する必要がなくなる。
+            * 以下、BatchNormalizationレイヤーを含むモデル構築の実装例。
+            ```python
+            // keras-bachnormalization-example.py
+            from tensorflow.python.keras.models import Sequential
+            from tensorflow.python.keras.layers import Dense, Activation, BatchNormalization
+
+            model = Sequential()
+            model.add(Dense(64, input_dim=20))
+            model.add(BatchNormalization())
+            model.add(Activation('relu'))
+            model.add(Dense(64))
+            model.add(BatchNormalization())
+            model.add(Activation('relu'))
+            model.add(Dense(10), activation='softmax')
+            ```
+        * Lambdaレイヤー
+            * 任意の式や関数をKerasレイヤーオブジェクトとして、ネットワークに組み込むことができる機能を提供。
+            * 以下は全ての入力値を255で割る処理をLambdaレイヤーオブジェクトとして指定し、```model.add()```する例。
+            ```python
+            // keras-lambda_layer-example.py
+            from tensorflow.python.keras.layers import Input, Lambda
+            from tensorflow.python.keras.models import Model
+
+            model_in = Input(shape=(20,))
+            x = Lambda(lambda x: x/255.)(model_in)
+            x = Dense(64, activation='relu')(x)
+            model_out = Dense(10, activation='softmax')(x)
+            model = Model(inputs=model_in, outputs=model_out)
+            ```
+    * 活性化関数(Activation)
+        * 深層学習ではReLUやシグモイド、softmaxなど様々な活性化関数が用いられる。
+        * 活性化関数はモデルのタスクに合わせて選択したり、論文でよい結果が出ている関数を選ぶことが多いが、それぞれどういう特徴を持っているかを把握しておくことが重要である。
+        * 以下に記載する活性化関数はReLUに変更を加えた関数である。これらは主に勾配消失(誤差の逆伝播を行う際に出力層から遡るにしたがって、誤差が小さくなり学習ができない状態)を防ぎ、効率的に学習するための工夫がされている。
+        * Kerasでの活性化関数の追加方法は大きく2つある。
+        * レイヤーオブジェクトの```activation```引数で指定
+            * ```Dense()```や```Conv2D()```などのレイヤー関数の引数として指定する。
+            * 追加は容易だが、活性化層を独立して扱うことができなくなる。
+            ```python
+            // keras-activation_as_parametor_of_layer_object-example.py
+            model = Sequential()
+            model.add(Dense(64, activation='relu', input_dim=20))
+            model.add(Dense(1, activation='sigmoid'))
+            model.compile(・・・)
+            ```
+        * Activationレイヤーを使用
+            * 一般的なレイヤーと同様に生成し、ネットワークに追加可能。
+            ```python
+            // keras-activation_as_layer_object-example.py
+            model = Sequential()
+            model.add(Dense(64, input_dim=20))
+            model.add(Activation('relu'))
+            model.add(Dense(1))
+            model.add(Activation('sigmoid'))
+            model.compile(・・・)
+            ・・・
+            ```
+        * 様々な活性化関数
+            * ReLU(Rectified Linear Unit)
+                * 入力値が0以下の場合は0、正の値の場合は入力値をそのまま出力する関数
+                * シグモイド関数では入力値が大きくなると、傾きが小さくなるが、ReLUは一定となる。これにより勾配消失問題が緩和できることが知られている。
+            * LeakyReLU
+                * ReLUのうちの特別な関数で入力値が0以下の場合(ニューロンが非アクティブの場合)でも微小な勾配を持つ関数。
+                * ReLUと同様、勾配消失問題を防ぎ、学習速度を向上できる。
+                * DCGAN(Deep Convolutional Generative Adversarial Network)でよく用いられる。
+            * ELU(Exponential Linear Unit)
+                * LeakyReLUと同様、入力値が0以下の場合にも微小な勾配を持つ関数。
+                * 入力値が0以下の場合、LeakyReLUは傾きが小さな線形関数となるのに対し、ELUは指数関数から1を引いた値を適用する。
+                * よって、入力値が負の場合の挙動がLeakyReLUと異なる。
+            * Clipped ReLU
+                * ReLUの出力値が一定の大きさ以上にならないように変更された関数。
+                * ReLUは入力値が正の場合、線形な変換が適用されるが、Clipped ReLUでは入力に対して出力は頭打ち状態になる。
+                * 勾配爆発に対する対処法として、音声認識ネットワークに導入されたのが初となる。
+                * Kerasではrelu関数のmax_value引数を指定することでClippingを実現できる。
+    * ImageDataGenerator
+        * Kerasでは、学習・推論時の入力画像の処理を効率的に行うためにImageDataGeneratorというジェネレータが用意されている。
+        * これにより、前処理をリアルタイムかつ容易に実施し、バッチ単位でモデルにデータを渡すことが可能。
+        * ImageDataGeneratorは生成時に以下のようなオプションを指定でき、画像に対してどういう前処理を行うかを指定することができる。
+            |オプション         |内容   |
+            |------------------|-------|
+            |rescale           |スケール変換(指定した値を各データに掛け合わせる)|
+            |rotation_range    |画像をランダムに回転する回転範囲(0-180)|
+            |width_shift_range |ランダムに水平方向にシフトする範囲|
+            |height_shift_range|ランダムに垂直方向にシフトする範囲|
+            |shear_range       |シアー強度(反時計回りのシアー角度(ラジアン))|
+            |zoom_range        |ランダムにズームする範囲|
+            |horizontal_flip   |水平方向にランダムに反転|
+            |vertical_flip     |垂直方向にランダムに反転|
+        * rescaleオプションは最も利用頻度は高く、入力値を[0, 1]の範囲にスケール変換する場合、```rescale=1/255.```と指定するだけで変換ができる。
+        * それ以外のオプションはデータ拡張に関するオプションである。
+        * データ拡張は入力画像にわずかな変換を加えることで、それらの画像を学習に用いることにより、テストデータに対するモデルの予測精度を高めることができる。
+        * ImageDataGeneratorインスタンスの生成の例は以下の通り。
+            ```python
+            // keras-ImageDataGenerator_options-example01.py
+            from tensorflow.python.keras.preprocessing.image import ImageDataGenerator
+
+            gen = ImageDataGenerator(
+                rescale=1/255.,
+                rotation_range=90.,
+                width_shift_range=1.,
+                height_shift_range=.5,
+                shear_range=.8,
+                zoom_range=.5,
+                horizontal_flip=True,
+                vertical_flip=True
+            )
+            ```
+        * ImageDataGeneratorのインスタンス生成後は```flow()```メソッド、```flow_from_directory()```メソッドを用い、指定した処理が適用された画像をミニバッチ単位で出力するイテレータを生成・取得する。
+        * 取得したイテレータはDirectoryIteratorクラスの```next```メソッドにより、1バッチ分のデータを取得する。
+        * 実装例は以下の通り。
+            ```python
+            // keras-ImageDataGenerator_options-example02.py
+            iters = gen.flow_from_directory(
+                'img',
+                target_size(32, 32),
+                class_mode='binary',
+                shuffle=True
+            )
+
+            x_train_batch, y_train_batch = next(iters)
+            ```
+        * ```flow_from_directory()```メソッドは第1引数に指定されたディレクトリ以下にクラスごとのサブディレクトリが存在し、その中に各クラスに属する画像が格納されていると認識して動作する。
+        * 学習・推論時も同様にKerasのモデルオブジェクトの```fit_generator()```や```predict_generator()```メソッドの引数に生成したイテレータを渡すことで実行できる。
+* CAE(Convolutional Autoencoder)を使ったノイズ除去
 
 
 
@@ -1637,6 +1777,32 @@
 
 
 
+
+
+## 補足
+1. データ前処理
+    1. 中心化(centralization)
+        * 対象のデータの集合 $X$ の各データ $x_{i}$ の中心化データ $\tilde{x_{i}}$ は各データの平均を $\overline x_{i}$ とすると、以下のようになる。
+        $$
+        \tilde{x_{i}} = x_{i} - \overline x_{i}
+        $$
+        * 中心化データ $\tilde{x_{i}}$ の平均は0になる。
+    2. 標準化(standardization)
+        * 対象のデータの集合 $X$ の各データ $x_{i}$ の標準化データ $\hat{x_{i}}$ はそのデータの中心化データ $\tilde{x_{i}}$ と $X$ の標準偏差 $\sigma$ とすると、以下のようになる。
+        $$
+        \hat{x_{i}} = \frac{\tilde{x_{i}}}{\sigma}
+        $$
+        * 標準化データ $\hat{x_{i}}$ の平均は0、分散は1になる。
+        * 標準化は正規化の1つであり、平均を0、分散を1にする正規化を標準化と呼ぶ。
+    3. 正規化(regularization)/正則化(normalization)
+        * 最大値・最小値をそれぞれ $M$、$m$ にする正規化は対象のデータの集合 $X$ のデータの最大値 $x_{max}$、データの最大値 $x_{min}$ とすると、データ $x_{i}$ の正規化データ $\dot x$ は以下のようになる。
+        $$
+        \dot x = \frac{x_{i} - x_{min}}{x_{max} - x_{min}} (M - m) + m
+        $$
+        * 特に最大値を1、最小値を0にする正則化データは、$M=1$、$m=0$ とすると、以下のようになる。
+        $$
+        \dot x = \frac{x_{i} - x_{min}}{x_{max} - x_{min}}
+        $$
 
 
 
@@ -1649,3 +1815,7 @@
     * https://qiita.com/YankeeDeltaBravo225/items/6968c376a491b6171671
 3. ディレクトリ構成図を書くときに便利な記号
     * https://qiita.com/paty-fakename/items/c82ed27b4070feeceff6
+4. データの標準化
+    * https://mathwords.net/hyouzyunka
+5. データの正規化
+    * https://mathwords.net/dataseikika
