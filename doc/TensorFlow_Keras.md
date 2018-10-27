@@ -1766,8 +1766,210 @@
         * ```flow_from_directory()```メソッドは第1引数に指定されたディレクトリ以下にクラスごとのサブディレクトリが存在し、その中に各クラスに属する画像が格納されていると認識して動作する。
         * 学習・推論時も同様にKerasのモデルオブジェクトの```fit_generator()```や```predict_generator()```メソッドの引数に生成したイテレータを渡すことで実行できる。
 * CAE(Convolutional Autoencoder)を使ったノイズ除去
+    * CAEの適用例と有用性
+        * 畳み込みニューラルネットワークを用いた基本的なアーキテクチャとして、CAE(Convolutional Autoencoder)がある。
+        * CAEとはCNNを用い、入力画像を圧縮(エンコード)し、圧縮したデータから入力画像を再構成(でコード)するモデルのこと。
+        * エンコード・デコードを行なうアーキテクチャなので、Encoder-Decoderの1種である。
+        * CAEの適用例としては以下がある。
+            * 車載カメラで撮影した画像から「人」、「道路」、「標識」などの領域を判別する「Semantic Segmentation」
+            * ラベルの付いていないデータから以上な画像を特定する「異常検知」
+        * さらにDAEと呼ばれるAutoencoderの頑健性を高める手法とCAEを組み合わせることで、画像のノイズ除去を行なうことができる。
+    * Autoencoderとは
+        * 出力 $\acute{x}$ が入力 $x$ に近づくように学習を行うニューラルネットワークアーキテクチャの1つ。
+        * もともとAutoencoderは次元削減の分野で活用されていた。
+        * シンプルなAutoencoderは入力 $x$ を中間層 $z$ に圧縮しようとする符号器関数(Encoder)と中間層 $z$ を入力 $x$ に復元しようとする再構成器関数(Decode)から構成される。
+        * この場合、中間層 $z$ の次元の大きさを入力 $x$ よりも小さくすることで、入力 $x$ を再現でき、かつ低次元の特徴を持った中間層 $z$ を得ることができる。
+        * 実際、初期の次元削減の研究において、AutoencoderはRBM(Restricted Bolzmann Machine：制約付きボルツマンマシン)と組み合わせることで、PCA(Principal Component Analysis：主成分分析)よりも再構成誤差が少なく、定性的に解釈できることがわかっている。
+    * CAEとは
+        * AutoencoderはそれまでMLP(Multilayer perceptron：多層パーセプトロン)として構成されており、全てのニューロン同士が密に結合する形になっていた。
+        * 一方、CAEはEncoder/Decoder双方でCNNを用いるアーキテクチャになっている。
+        * 一般に画像処理分野ではMLPよりCNNの方が2次元画像構造をうまく捉えた学習ができるとされている。
+        * Autoencoderも同様で、MLPの代わりにCNNを取り入れることで同じ効果が期待できる。
+        * Encoder部分は畳み込み層とプーリング層で構成し、入力 $x$ を圧縮した中間層 $z$ を構築する。
+        * Decoder部分は畳み込み層とアップサンプリング層で構成し、中間層 $z$ から再構成を行い、$\acute{x}$ を出力する。
+            * アップサンプリングは画像拡大処理のことで指定した列・行サイズ分繰り返して並べる処理を行うことを指す。
+    * DAE(Denoising Autoencoder：デノイジングオートエンコーダ)とは
+        * Autoencoderの入力 $x$ にノイズを加えた $\check{x}$ をモデルの入力画像とするアーキテクチャのこと。
+        * Autoencoderは出力 $\acute{x}$ を入力 $x$ に近づけるように学習を行っていくが、DAEはノイズ混じりの入力 $\check{x}$ をノイズを除去しながらオリジナルのデータ $x$ に近づけるように学習をすることになる。
+        * それにより、DAEはAutoencoderよりも頑健になることが知られている。
+    * ノイズ除去の応用
+        * 例えば、OCR(Optical Character Recognition)の前処理に使用できる。
+        * OCRとは手書きや印刷文字が写っている画像から文字を認識し、文字コードに変換する処理のこと。
+        * この処理により、文字検索ができたり、自動でカテゴリ分けもできるようになる。
+        * ただし、OCRを用いる場合、その対象の文字が汚れていたり、古かったりした場合、文字として認識することが難しいことがある。
+        * そのような場合、文字としての認識が難しい画像(ノイズ混じりの文字画像)から元の文字を復元することにより、画像を文字として認識することができるようになる。
+        * 以下はMNISTデータに対して、疑似的なノイズを加え、それをCAEで学習することにより、元の文字列を復元する実装例。
+           ```python
+           import numpy as np
+           import matplotlib.pyplot as plt
+
+           from tensorflow.python.keras.models import Model, Sequential
+           from tensorflow.python.keras.layers import Conv2D, Dense, Input, MaxPool2D, UpSampling2D, Lambda
+
+           from tensorflow.python.keras.datasets import mnist
 
 
+           def make_masking_noise_data(data_x, persent=0.1):
+               size = data_x.shape
+               masking = np.random.binomial(n=1, p=persent, size=size)
+               return data_x * masking
+
+           def make_gaussian_noise_data(data_x, scale=0.8):
+               gaussian_data_x = data_x + np.random.normal(loc=0, scale=scale, size=data_x.shape)
+               gaussian_data_x = np.clip(gaussian_data_x, 0, 1)
+               return gaussian_data_x
+
+           # Download the dataset of MNIST
+           (x_train, _), (x_test, _) = mnist.load_data()
+
+           # Check the shapes of MNIST data to be downloaded.
+           print('x_train.shape: ', x_train.shape)  # (60000, 28, 28)
+           print('x_test.shape: ', x_test.shape)    # (10000, 28, 28)
+
+           # Preprocessing - exchange the scale of data
+           x_train = x_train.reshape(-1, 28, 28, 1)
+           x_train = x_train/255
+           x_test = x_test.reshape(-1, 28, 28, 1)
+           x_test = x_test/255
+
+           # Make data with masking noise
+           x_train_masked = make_masking_noise_data(x_train)
+           x_test_masked = make_masking_noise_data(x_test)
+
+           # Make data with gaussian noise
+           x_train_gauss = make_gaussian_noise_data(x_train)
+           x_test_gauss = make_gaussian_noise_data(x_test)
+
+           # Display orginal data, data with masking noise and data with gaussian noise
+           for i in range(10):
+               plt.subplot(2, 5, i+1)
+               plt.title("M_%d" %i)
+               plt.axis("off")
+               plt.imshow(x_train[i].reshape(28, 28), cmap=None)
+           plt.show()
+           for i in range(10):
+               plt.subplot(2, 5, i+1)
+               plt.title("M_%d" %i)
+               plt.axis("off")
+               plt.imshow(x_train_gauss[i].reshape(28, 28), cmap=None)
+           plt.show()
+           for i in range(10):
+               plt.subplot(2, 5, i+1)
+               plt.title("M_%d" %i)
+               plt.axis("off")
+               plt.imshow(x_train_masked[i].reshape(28, 28), cmap=None)
+           plt.show()
+
+           # Create the neural network
+           autoencoder = Sequential()
+
+           ## Create the encoder parts
+           autoencoder.add(Conv2D(16, (3,3), 1, activation='relu', padding='same', input_shape=(28, 28, 1)))
+           autoencoder.add(MaxPool2D((2,2), padding='same'))
+           autoencoder.add(Conv2D(8, (3,3), 1, activation='relu', padding='same'))
+           autoencoder.add(MaxPool2D((2,2), padding='same'))
+
+           ## Create the decoder parts
+           autoencoder.add(Conv2D(8, (3,3), 1, activation='relu', padding='same'))
+           autoencoder.add(UpSampling2D((2,2)))
+           autoencoder.add(Conv2D(16, (3,3), 1, activation='relu', padding='same'))
+           autoencoder.add(UpSampling2D((2,2)))
+           autoencoder.add(Conv2D(1, (3,3), 1, activation='sigmoid', padding='same'))
+
+           # Setting for learning
+           autoencoder.compile(optimizer='adam', loss='binary_crossentropy')
+           initial_weights = autoencoder.get_weights()
+
+           # Check the summary of network
+           autoencoder.summary()
+
+           # Learn1(Input data:data with gaussian noise, Label data: original data)
+           autoencoder.fit(x_train_gauss, x_train, epochs=10, batch_size=20, shuffle=True)
+
+           # Predict using the network after Learn1
+           gauss_preds = autoencoder.predict(x_test_gauss)
+
+           #  Learn2(Input data:data with masking noise, Label data: original data)
+           autoencoder.set_weights(initial_weights)
+           autoencoder.fit(x_train_masked, x_train, epochs=10, batch_size=20, shuffle=True)
+
+           # Predict using the network after Learn2
+           masked_preds = autoencoder.predict(x_test_masked)
+
+           # Display the result of learning.
+           for i in range(10):
+               plt.subplot(2, 5, i+1)
+               plt.title("M_%d" %i)
+               plt.axis("off")
+               plt.imshow(x_test[i].reshape(28, 28), cmap=None)
+           plt.show()
+           for i in range(10):
+               plt.subplot(2, 5, i+1)
+               plt.title("M_%d" %i)
+               plt.axis("off")
+               plt.imshow(x_test_gauss[i].reshape(28, 28), cmap=None)
+           plt.show()
+           for i in range(10):
+               plt.subplot(2, 5, i+1)
+               plt.title("M_%d" %i)
+               plt.axis("off")
+               plt.imshow(gauss_preds[i].reshape(28, 28), cmap=None)
+           plt.show()
+           for i in range(10):
+               plt.subplot(2, 5, i+1)
+               plt.title("M_%d" %i)
+               plt.axis("off")
+               plt.imshow(x_test_masked[i].reshape(28, 28), cmap=None)
+           plt.show()
+           for i in range(10):
+               plt.subplot(2, 5, i+1)
+               plt.title("M_%d" %i)
+               plt.axis("off")
+               plt.imshow(masked_preds[i].reshape(28, 28), cmap=None)
+           plt.show()
+           ```
+        * 始めに```MNIST```クラスの```load_data()```メソッドでデータセットをダウンロードする。データは```numpy.ndarray```クラスの形式で保存される。
+        * MNISTデータは比較的小さいデータセットのため、```ImageDataGenerator```は使用せず、全てのデータを読み込む実装としている。
+        * ```x_train```, ```x_test```はそれぞれ(60000, 28, 28)、(10000, 28, 28)のサイズとなっているが、各データをCNNに入力するにあたり、チャンネル次元を付け加えることでCNNで扱いやすい形に変換する。
+        * よって、それぞれ(60000, 28, 28, 1)、(10000, 28, 28, 1)にreshapeし、加えて、データの正規化のために各値を255で割る。
+        * 次に各データにそれぞれマスキングノイズ、ガウシアンノイズを加えるためのメソッド```make_masking_noize_data()```、```make_gaussian_noize_data()```を定義する。
+        * ```make_masking_noize_data()```メソッドでは、```np.random.binomial()```を用い、n=1, P=0.1の二項分布からデータ数分のランダム値配列を生成している。
+        * 生成したランダム値配列とデータの値を掛けることでマスキングノイズを付け加えたデータを生成し、```x_train_masked```, ```x_test_masked```に格納する。
+        * ```make_gaussian_noize_data()```メソッドでは、```np.random.nomial()```を用い、平均=0、標準偏差=0.8のガウス分布(正規分布)からデータ数分のランダム値配列を生成している。
+        * 生成したランダム値配列とデータの値を足すことでガウシアンノイズを付け加えたデータを生成する。
+        * ここでは```np.clip()```を用い、0以下になった値を0に、1以上になった値を1に変更している。
+        * これにより、生成したデータはそれぞれ```x_train_gauss```, ```x_test_gauss```に格納する。
+        * CAEで学習するノイズありの学習データの生成はできたので、次にSequential APIでCAEのモデルを構築する。
+        * モデルはEncoder部分とDecoder部分から成る。
+        * Encoderは2層の畳み込み層・プーリング層で構築し、Decoderは2層の畳み込み層・アップサンプリング層で構築する。
+        * Decoderの最終層は出力データのチャンネルを1にするために畳み込み層を追加する。
+        * Encoder第1層の畳み込み層では、MNISTのデータ(28, 28, 1)を入力とし、出力チャンネル数(filters)は16としている。```padding=same```としているので、この層でのデータサイズの変更はない。
+        * よって、第1層の出力は(28, 28, 16)、つまり(28, 28)の特徴マップが16枚となる。
+        * Encoder第2層のプーリング層ではMax poolingを適用し、```pooling_size=(2,2)```, ```padding=same```としているので、この層での出力は(14, 14, 16)、つまり特徴マップ数は変わらず、データサイズを縦・横共に半分となる。
+        * Encoder第3層の畳み込み層は入力が(14, 14, 16)となり、出力チャンネル数(filters)は8、```padding=same```なので、この層での出力は(14, 14, 8)となり、データサイズの変更はない。
+        * Encoder第4層のプーリング層では同様にMax poolingを適用し、```pooling_size=(2,2)```, ```padding=same```としているので、この層の出力は(7, 7, 8)となり、特徴マップ数は変わらず、データサイズを縦・横共に半分となる。
+        * Decoderの第1層～第4層は基本的にEncoderの第4層～第1層を重ねる。
+        * Decorder第5層は出力チャンネルを1(CAEの出力となるため、画像1枚分の出力にする必要がある)とするために```filters=1```として、畳み込み層を1層追加する。
+        * 構築したCAEのモデルを```compile()```メソッドを使い、```optimizer='adam'```, ```loss='binary_crossentropy'```を設定してcompileする。
+        * ```compile()```メソッドでcompileすることにより、重みとバイアスの初期値が自動で生成されるため、その初期値を```get_weights()```メソッドで取得し、```initial_weights```に保持する。
+        * これは、ガウシアンノイズを加えたデータとマスキングノイズを加えたデータをそれぞれ使用して学習するにあたり、同じ初期値を使用して学習したいためである。
+        * 次にガウシアンノイズを加えたデータを使っての学習を行う。
+        * 学習には```fit()```メソッドを使用し、学習データとしてガウシアンノイズを加えたデータ```x_train_gauss```、ラベルデータとして、元のMNISTの画像データ```x_train```を指定する。
+        * 学習後にはテストデータを使用して予測を行う。
+        * 予測には```predict()```メソッドを使用し、テストデータとして```x_test_gauss```を指定する。
+        * 予測により、学習には使用していないガウシアンノイズを加えたデータからノイズを除去した```x_train```に近いデータが生成され、```gauss_preds```に保存する。
+        * 同様にマスキングノイズを加えたデータを使っての学習を行う。
+        * 学習データとしてマスキングノイズを加えたデータ```x_train_masked```、ラベルデータとして、元のMNISTの画像データ```x_train```を指定し、同様に```fit()```メソッドを使用して学習を行う。
+        * 学習後の予測も同様に```predict()```メソッドを使用し、テストデータとして```x_test_masked```を指定する。
+        * 予測により、生成された```x_train```に近いデータは```masked_preds```に保存する。
+    * 2種類のノイズあり画像を使って学習したモデルの予測結果
+        * ノイズをのせた画像を使って学習したモデルを使うことで、ガウシアンノイズ・マスキングノイズを意図的に付与した未知の画像であっても、再構成できていることがわかる。
+        * 上述のCAEのネットワーク構成はシンプルなものだが、人間がノイズあり画像を見て予測するよりはかなり精度が高く認識できていることがわかる。
+        * ただCAEによって、生成された画像は全体的にぼやける傾向がある。
+        * さらにアーキテクチャを工夫することで画像がぼやけないように生成することができる。
+        * CAEはDCGANと呼ばれる生成モデルの一部に使用されていたり、CAEを拡張したアーキテクチャがセマンティックセグメンテーションのタスクで使用されており、幅広い分野に応用できる技術と言える。
+* 自動着色
+    * a
 
 
 
