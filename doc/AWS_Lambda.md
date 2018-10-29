@@ -183,9 +183,9 @@
         * このポリシーの適用により、Lambda関数にCloudWatchLogsへの書き込みアクセス権(「logs:PutLogEvents」、「logs:CreateLogStream」、「logs:CreateLogGroup」)が付与される。
 
 ###### 2-3-4. IAMユーザとIAMロールを作成する
-* 開発者のIAMユーザを作成
-    * 「AWSLambdaFullAccess」を適用したIAMユーザを作成する。
-    * ★Appendix A
+* 開発者のIAMユーザ(「AWSLambdaFullAccess」を適用したIAMユーザ)を作成
+    * AWSコンソールにログインし、"サービス"からIAM(Identity and Access Management)を選択。
+    * "ユーザー"タブを選択し、ユーザー一覧を表示する。"ユーザーを追加"ボタンを選択。
 * Lambdaの実行ロールを作成
     * 「AWSLambdaBasicExecutionRole」を適用したIAMロールを作成する。
     * 作成するロール名は「role-lambdaexec」とする。
