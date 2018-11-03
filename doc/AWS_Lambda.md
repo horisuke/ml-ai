@@ -184,14 +184,178 @@
 
 ###### 2-3-4. IAMユーザとIAMロールを作成する
 * 開発者のIAMユーザ(「AWSLambdaFullAccess」を適用したIAMユーザ)を作成
-    * AWSコンソールにログインし、"サービス"からIAM(Identity and Access Management)を選択。
-    * "ユーザー"タブを選択し、ユーザー一覧を表示する。"ユーザーを追加"ボタンを選択。
+    * AWSコンソールにログインし、"サービス"からIAM(Identity and Access Management)を選択
+    * "ユーザー"タブを選択し、ユーザー一覧を表示
+    * "ユーザーを追加"ボタンを選択し、ユーザー名を入力(ここではdevuser)
+    * "アクセスの種類"では"プログラムによるアクセス"、"AWSマネジメントコンソールへのアクセス"の両方をチェックする。
+    * "AWSマネジメントコンソールへのアクセス"をチェックすると、以下が表示されるので、それぞれ以下の通り設定する。
+        * コンソールのパスワード：自動生成パスワード
+        * パスワードのリセットが必要：チェックを入れる
+    * "次のステップ：アクセス権限"を選択
+    * 作成するユーザーdevuserにアクセス権を付与する。ここでは既存のポリシー「AWSLambdaFullAccess」を付与するので、"既存のポリシーを直接アタッチ"を選択
+    * ポリシー一覧から「AWSLambdaFullAccess」を探し、チェックを入れ、"次のステップ：確認"を選択
+    * 確認画面が表示され、内容を確認し、"ユーザーの作成"を選択すると、作成したユーザーの"アクセスキーID"、"シークレットアクセスキー"、"パスワード"が発行される。
+    * 非表示になっている項目は"表示"を選択して確認する。
+    * 次に作成したIAMユーザでAWSコンソールに以下のリンクからログインする。
+        * https://<アカウントID>.signin.aws.amazon.com/console
+    * 上記にアクセスし、"アカウント"、"ユーザー名"、"パスワード"を入力し、"サインイン"を選択。
+    * 次画面でパスワードを変更し、"パスワード変更の確認"を選択すると、AWSコンソールにログインできることを確認
+        * devuser@horisuketestでログインされていることが確認可能。
+    * 次に「AWSLambdaFullAccess」に加え、API Gateway, SES, SQS, SNSを操作する権限を追加する。
+        * 「AWSLambdaFullAccess」にはLambda, DynamoDB, S3などへのフルアクセス権しかないため。
+    * rootアカウントでAWSコンソールにサインインし直し、"サービス"からIAM(Identity and Access Management)を選択、"ユーザー"タブを選択し、ユーザー一覧を表示する。
+    * 作成した"devuser"を選択して、"概要"を開き、"アクセス権限"タブで"アクセス権限の追加"を選択。
+    * "既存のポリシーを直接アタッチ"を選択し、以下のポリシーにチェックを入れ、"アクセス権限の追加"を選択する。
+        * AmazonAPIGatewayAdministrator
+        * AmazonSESFullAccess
+        * AmazonSQSFullAccess
+        * AmazonSNSFunAccess
+    * "devuser"の"概要"画面にて、選択したポリシーがアタッチされていることを確認
 * Lambdaの実行ロールを作成
-    * 「AWSLambdaBasicExecutionRole」を適用したIAMロールを作成する。
-    * 作成するロール名は「role-lambdaexec」とする。
-    * ★Appendix B
+    * 「AWSLambdaBasicExecutionRole」を適用したIAMロールを作成する。作成するロール名は「role-lambdaexec」とする。
+    * AWSコンソールにログインし、"サービス"からIAM(Identity and Access Management)を選択し、"ロール"タブを選択。
+    * "ロールの作成"を選択し、ロールタイプとして"AWSサービス"を選択し、"Lambda"を選択する
+    * "次のステップ：アクセス権限"を選択し、「AWSLambdaBasicExecutionRole」ポリシーをフィルタしてチェックをし、"次のステップ：確認"を選択する。
+    * ロール名として「role-lambdaexec」を入力し、"ロールの作成"を選択すると、ロール一覧に作成したロールが表示されていることを確認する。
+    * 次に作成したロールにS3, DynamoDB, SES, SQS, SNSの操作権限を付与する。
+    * ロール一覧画面で作成したロール「role-lambdaexec」を選択し、"概要"を開く。
+    * "アクセス権限"タブで"ポリシーをアタッチします"を選択し、以下のポリシーにチェックを入れる。
+        * AmazonS3FullAccess
+        * AmazonDynamoDBFullAccess
+        * AmazonSESFullAcccss
+        * AmazonSQSFullAcccss
+        * AmazonSNSFunAcccss
+    * "ポリシーのアタッチ"を選択し、「role-lambdaexec」に指定したロールがアタッチされていることを確認。
 
 ##### 2-4. Lambda関数の作成
+* ※As of 2018/11/03
+* AWSコンソールでLambda関数を作成する。
+* ここでは、上記で作成した「AWSLambdaFullAccess」ポリシーが付与されたIAMアカウントを使用する。
+* AWSコンソールに「devuser」でサインインし直し、"サービス"からLambdaを選択する。
+* 関数未作成時はLambdaコンソールを開くと、"関数の作成"が表示されるので選択する。
+* "関数の作成"画面では"一から作成"を選択し、以下を選択・入力し、"関数の作成"を選択する。
+    * 名前：HelloLambda
+    * ランタイム：Python3.6
+    * ロール：既存のロールを選択
+    * 既存のロール：role-lambdaexec
+* HelloLambdaの設定タブに遷移し、トリガー(AWSのどのサービスによって、どういう状況で呼び出されるか)の選択を行う。
+* ここではひとまずトリガーの追加は行わず、そのままにする。
+* 関数コード部分にはデフォルトで以下のコードが記述されている。
+    ```python
+    import json
+
+    def lambda_handler(event, context):
+        # TODO implement
+        return {
+            "statusCode": 200,
+            "body": json.dumps('Hello from Lambda!')
+        }
+    ```
+* この部分を前述した以下のサンプルプログラムに書き換える。
+* "コードエントリータイプ"をデフォルトの"コードをインラインで編集"から".zipファイルをアップロード"に変更することでzip形式でアーカイブしたものをアップロードすることもできる。
+    ```python
+    import json
+
+    def myfunc01_handler(event, context):
+        x = int(event['x'])
+        y = int(event['y'])
+        print("x = " + str(x))
+        print("y = " + str(y))
+        retval = {'result' : x / y}
+        return json.dumps(retval)
+    ```
+* "ハンドラ"はLambda関数が呼び出されたときにそれを処理する関数のことでLambda関数をPythonで記述する場合、ハンドラは「ファイル名.関数名」で記述される。
+* ここではハンドラは"lambda_function.myfunc01_handler"として設定する。
+* 環境変数部分にはLambd関数から参照したい値がある場合に値を設定する。ここでは空欄のままとする。
+* タグ部分でLambda関数にタグ付けが可能。タグをつけることにより、グループ化や検索が可能となる。ここでは利用せず、空欄のままとする。
+* 実行ロール部分は前画面で設定したロールと選択した既存ロールが反映されているため、そのままにする。
+* 基本設定部分ではそれぞれ、以下を入力・設定する
+    * 説明：My first lambda function.
+    * メモリ：128MB
+    * タイムアウト：3秒
+* "メモリ"ではLambda関数の使用するメモリを指定できる。メモリを必要とする処理をしたい場合や実行時間を短くしたい場合は大きな値を設定する方がよいが、費用も大きくなる。
+* "タイムアウト"は値を大きくしても追加課金はされない。一方、大きくし過ぎて無限ループが発生するようなコードが実行されると、そのタイムアウト時間まで課金が発生する可能性がある。
+* 以下の設定はそれぞれデフォルトのままとする。
+    * ネットワーク > VPC：非VPC
+        * Lambda関数からVPCに配置されたリソースにアクセスしたい場合にVPCを指定する。不要の場合は"非VPC"を指定する。
+    * デバッグとエラー処理 > DLQリソース：なし
+        * 非同期呼び出しが失敗した場合の通知方法を選択
+    * 同時実行数 > 予約されていないアカウントの同時実行1000
+* 全ての設定が完了したら、コンソール上部の"保存"を選択し、Lambda関数及びその設定を保存する。
+
+##### 2-5. Lambda関数の実行
+* ※As of 2018/11/03
+* 作成したLambda関数を手動で実行して結果を確認する。Lambdaコンソールで「テストイベント」を定義することでLambda関数を手動実行することができる。
+* Lambdaコンソールから作成した関数「HelloLambda」を選択すると、作成した関数が表示される。
+* 上部の"テストイベントの選択"プルダウンから"テストイベントの設定"を選択する。
+* テストイベントの設定画面で以下の通り、設定する
+    * "新しいテストイベントの作成"を選択
+    * イベントテンプレート：Hello World
+    * イベント名：MyLambdaTestEvent
+* また、Lambda関数は $x$, $y$ を入力として受け取り、"x÷y"の値を戻り値として返す関数なので、以下のようなJSONをテストイベントとして記載する。
+    ```python
+    {
+      "x": 10,
+      "y": 2
+    }
+    ```
+* テストイベントを記載後、"作成"を選択すると、「HelloLambda」の設定画面に遷移する。
+* 画面上部のテストイベント部分に作成したテストイベント「MyLambdaTestEvent」がセットされていることを確認し、"テスト"を選択する。
+* テストの実行が終わるとダイアログが表示され、詳細タブを開くと、以下のような内容を確認できる。
+    * 関数実行によって返された結果
+        * "{\"result\": 5.0}"
+    * 概要
+        * 所要時間
+        * 課金期間
+        * 設定済みリソース
+        * 使用中最大メモリ　など
+    * ログ出力
+        ```
+        START RequestId: 7b8218c5-df88-11e8-bb42-a5af044d9512 Version: $LATEST
+        x = 10
+        y = 2
+        END RequestId: 7b8218c5-df88-11e8-bb42-a5af044d9512
+        REPORT RequestId: 7b8218c5-df88-11e8-bb42-a5af044d9512	Duration: 0.37 ms	Billed Duration: 100 ms 	Memory Size: 128 MB	Max Memory Used: 21 MB
+        ```
+* この処理に関するログはダイアログの(ログ)のリンクを選択し、CloudWatch Logsを開くか、"ログ出力"部分を確認する。
+* "x=10", "y=2"はPythonのprint文の処理であることから、標準出力はCloudWatch Logsに出力されることがわかる。
+* 一方、Lambda関数の処理でエラーや例外が発生した場合の動作を確認する。
+* Lambdaコンソールのメニューから"テストイベントの設定"を選択し、保存したテストイベント"MyLambdaTestEvent"を以下の通り変更する。
+    ```python
+    {
+      "x": 10,
+      "y": 0
+    }
+    ```
+* このテストイベントでLambda関数を実行すると、実行結果が失敗となり、詳細に以下が表示される。
+    ```
+    {
+      "errorMessage": "division by zero",
+      "errorType": "ZeroDivisionError",
+      "stackTrace": [
+        [
+          "/var/task/lambda_function.py",
+          8,
+          "myfunc01_handler",
+          "retval = {'result' : x / y}"
+        ]
+      ]
+    }
+    ```
+* Pythonで例外が発生した場合は、"errorMessage"、"errorType"、"stackTrace"の値を含むJSONが返される。
+* このエラー情報はLambda関数実行成功時と同様、ClousWatch Logsにも表示される。
+
+##### 2-6. まとめ
+* Lambda関数は前述の通り、以下の書式の関数である。
+   ```
+   def myfunc_handler(event, context):
+       ・・・関数の処理・・・
+       return 戻り値
+   ```
+* 一方、Lambda関数を実行するためにアクセス権を設定するなど特殊な側面もある。
+* 上記では手作業でLambda関数を実行したが、AWSの各種サービスをトリガーとして実行する場合は、"event"引数にその時の様々な情報を格納し、Lambda関数が呼び出される。
+
+#### 3. AWS Lambdaの仕組み
 * aa
 
 
@@ -200,4 +364,7 @@
 
 
 
-#### 3.
+
+
+
+#### 4. aa
