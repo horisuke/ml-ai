@@ -1984,7 +1984,150 @@
                 * 転置畳み込み層はアップサンプリング層とは別のアプローチの入力テンソルの拡大手法である。
                 * この層で入力テンソル拡大と畳み込み処理を行なう。
     * 画像の表現方法の変更
-        * aa
+        * 自動着色では扱う画像形式をRGBではなく、LABで扱う。これはLABの方が自動着色のタスクに適しているためである。
+        * 画像は一般的にRed, Green, Blueの3色を混ぜて色表現を行なう画像形式「RGB」が用いられることが多い。
+        * よって、画像データは「画像の幅×画像の高さ×チャンネル数(=RGBの3チャンネル)」で表現できる。
+        * 「LAB」は「RGB」とは別の色表現の方法で、人間の視覚に近い設計になっており、「L」が明るさ、「A」、「B」が色を表している。
+        * モノクロの写真は明るさを記録しており、自動着色はその明るさの情報から色を再現するタスクと言える。
+        * そのため、自動着色のタスクを行うモデルのアーキテクチャは明るさ「L」を入力にし、色を表す「A」、「B」を出力する形になっていることが多い。
+        * つまり自動着色タスクでは入力データ「L」と予測データ「A」、「B」を結合して画像を出力する。
+    * 自動着色タスクの処理の流れ
+        * 以下の流れで自動着色を行う。
+            1. データの読み込み
+            2. 前処理：RGB → LAB変換
+            3. モデルの構築
+            4. モデルの学習・予測
+            5. 後処理：予測結果「A」、「B」を入力して「L」と結合し、RGBに変換
+        * 実装は以下の通り。
+           ```python
+           import os
+           import glob
+           import math
+           import random
+
+           import numpy as np
+           #import matplotlib as plt
+           import matplotlib.pyplot as plt
+
+           from tensorflow.python import keras
+           from tensorflow.python.keras import backend as K
+           from tensorflow.python.keras.models import Model, Sequential
+           from tensorflow.python.keras.layers import Conv2D, Dense, Input, MaxPool2D, UpSampling2D, Lambda, Conv2DTranspose
+           from tensorflow.python.keras.preprocessing.image import load_img, img_to_array, array_to_img, ImageDataGenerator
+
+           import cv2
+
+           img_size = 224
+           def rgb2lab(rgb):
+               assert rgb.dtype == 'uint8'
+               return cv2.cvtColor(rgb, cv2.COLOR_RGB2LAB)
+
+           def lab2rgb(lab):
+               assert lab.dtype == 'uint8'
+               return cv2.cvtColor(lab, cv2.COLOR_LAB2RGB)
+
+           def get_lab_from_data_list(data_list):
+               x_lab = []
+               for f in data_list:
+                   rgb = img_to_array(load_img(f, target_size=(img_size, img_size))).astype(np.uint8)
+                   lab = rgb2lab(rgb)
+                   x_lab.append(lab)
+               return np.stack(x_lab)
+
+           def generator_with_preprocessing(data_list, batch_size, shuffle=False):
+               while True:
+                   if shuffle:
+                       np.random.shuffle(data_list)
+                   for i in range(0, len(data_list), batch_size):
+                       batch_list = data_list[i:i+batch_size]
+                       batch_lab = get_lab_from_data_list(batch_list)
+                       batch_l = batch_lab[:,:,:,0:1]
+                       batch_ab = batch_lab[:,:,:,1:]
+                       yield (batch_l, batch_ab)
+
+
+           # Divide datasets for validation, test, and training.
+           data_path = 'img/colorize'
+           data_lists = glob.glob(os.path.join(data_path, '*.jpg'))
+
+           val_n_sample = math.floor(len(data_lists)*0.1)
+           test_n_sample = math.floor(len(data_lists)*0.1)
+           train_n_sample = len(data_lists) - val_n_sample - test_n_sample
+
+           val_lists = data_lists[:val_n_sample]
+           test_lists = data_lists[val_n_sample:val_n_sample+test_n_sample]
+           train_lists = data_lists[val_n_sample+test_n_sample:train_n_sample+val_n_sample+test_n_sample]
+
+           # Create the neural network
+           autoencoder = Sequential()
+           # Encoder
+           autoencoder.add(Conv2D(32, (3,3), (1,1), activation='relu', padding='same', input_shape=(224,224,1)))
+           autoencoder.add(Conv2D(64, (3,3), (2,2), activation='relu', padding='same'))
+           autoencoder.add(Conv2D(128, (3,3), (2,2), activation='relu', padding='same'))
+           autoencoder.add(Conv2D(256, (3,3), (2,2), activation='relu', padding='same'))
+           # Decoder
+           autoencoder.add(Conv2DTranspose(128, (3,3), (2,2), activation='relu', padding='same'))
+           autoencoder.add(Conv2DTranspose(64, (3,3), (2,2), activation='relu', padding='same'))
+           autoencoder.add(Conv2DTranspose(32, (3,3), (2,2), activation='relu', padding='same'))
+           autoencoder.add(Conv2D(2, (1,1), (1,1), activation='relu', padding='same'))
+           autoencoder.compile(optimizer='adam', loss='mse')
+           autoencoder.summary()
+
+           # c
+           batch_size = 30
+           train_gen = generator_with_preprocessing(train_lists, batch_size, shuffle=True)
+           val_gen = generator_with_preprocessing(val_lists, batch_size)
+           test_gen = generator_with_preprocessing(test_lists, batch_size)
+
+           train_steps = math.ceil(len(train_lists)/batch_size)
+           val_steps = math.ceil(len(val_lists)/batch_size)
+           test_steps = math.ceil(len(test_lists)/batch_size)
+
+           # d
+           epochs = 10
+           autoencoder.fit_generator(generator=train_gen, steps_per_epoch=train_steps, epochs=epochs, validation_data=val_gen, validation_steps=val_steps)
+
+           # e
+           preds = autoencoder.predict_generator(test_gen, steps=test_steps, verbose=0)
+           x_test = []
+           y_test = []
+           for i, (l, ab) in enumerate(generator_with_preprocessing(test_lists, batch_size)):
+               x_test.append(l)
+               y_test.append(ab)
+               if i == (test_steps - 1):
+                   break
+           x_test = np.vstack(x_test)
+           y_test = np.vstack(y_test)
+
+           # f
+           test_preds_lab = np.concatenate((x_test, preds), 3).astype(np.uint8)
+           test_preds_rgb = []
+           for i in range(test_preds_lab.shape[0]):
+               preds_rgb = lab2rgb(test_preds_lab[i,:,:,:])
+               test_preds_rgb.append(preds_rgb)
+           test_preds_rgb = np.stack(test_preds_rgb)
+
+           # g
+           ```
+        * まず、'img/colorize'以下にデータセットを配置する。
+        * ```os.path.join()```メソッドでデータセットを配置したパスとデータセットのファイル名を結合し、引数にマッチするパスをリスト```data_lists```として取得する。
+        * ここでは配置されたデータセットのうち、jpgファイルのみをホームディレクトリからのパスを含めて取得する。
+        * 次にデータセットを検証用データ・評価用データ・学習用データとして、1:1:8に分割する。
+        * 検証用データ数・評価用データ数は```data_lists```の要素数に0.1を掛け、```math.floor()```をとり、データ数*0.1以下の最大整数値を設定する。
+        * 学習用データ数は、```data_lists```の要素数から検証用データ数・評価用データ数を引いた残りとして設定する。
+        * これらの各データ数を元に```data_lists```を分割し、検証用データ・評価用データ・学習用データをそれぞれ```val_lists```, ```test_lists```, ```train_lists```とする。
+        * 次にニューラルネットワークを構築する。CAEとの主な違いは以下。
+            * Encoder：Maxpooling層　→　Strideを(2,2)の畳み込み層
+            * Decoder：UpSampling層　→　転置畳み込み層
+            * ネットワークの出力：1チャンネル　→　2チャンネル
+                * MNIST画像の再生成を行なうCAEではMNISTがグレースケールのため、出力は1チャンネルだったが、自動着色タスクでは「A」、「B」を出力する必要があるため、2チャンネルとなる。
+            * Encoderでチャンネル数減少、Decoder部分でチャンネル数増加　→　Encoderでチャンネル数増加、Decoder部分でチャンネル数減少
+                * CAEは次元の削減を目的としており、Encoder部分は入力画像の特徴を捉えることのできる中間層を得ることを目的としているため、チャンネル数を層を重ねるにつれ、半分になるように設計している。
+                * 一方、自動着色のタスクでは中間層が小さすぎるとモデル全体の表現力が下がってしまうため、層を重ねるにつれ、チャンネルを倍にするように設計している。
+        * 次にモデルの学習を行う。
+        * 始めに学習・検証・評価に用いるgeneratorを```generator_with_preprocessing()```メソッドとして準備する。
+        * ```yield```を使うことにより、その時点での```x_batch```, ```y_batch```を返すことでその関数を抜けることができる。
+
 
 
 
