@@ -2073,7 +2073,7 @@
            autoencoder.compile(optimizer='adam', loss='mse')
            autoencoder.summary()
 
-           # c
+           # Create data generators & steps for training, validation, and test
            batch_size = 30
            train_gen = generator_with_preprocessing(train_lists, batch_size, shuffle=True)
            val_gen = generator_with_preprocessing(val_lists, batch_size)
@@ -2126,7 +2126,19 @@
                 * 一方、自動着色のタスクでは中間層が小さすぎるとモデル全体の表現力が下がってしまうため、層を重ねるにつれ、チャンネルを倍にするように設計している。
         * 次にモデルの学習を行う。
         * 始めに学習・検証・評価に用いるgeneratorを```generator_with_preprocessing()```メソッドとして準備する。
-        * ```yield```を使うことにより、その時点での```x_batch```, ```y_batch```を返すことでその関数を抜けることができる。
+        * パラメータとして、データセットのリスト```data_list```、バッチサイズ```batch_size```、データセットをシャッフルするかのフラグ```shuffle```を受け取る。
+        * ```shuffle=True```の場合は```np.random.shuffle()```で```data_list```をシャッフルする。
+        * 次に```data_list```の各要素を```for ... in range()```でバッチサイズごとに分ける。
+        * ```range()```メソッドには0～```data_list```のサイズまでを```batch_size```ごとに区切り、for文を回す。
+        * for文内では以下の処理を行う。
+            * ```data_list```からバッチサイズ分の要素を取り出し、1つのバッチで使用するデータのリスト```batch_list```を作成する。
+            * 作成した```batch_list```に含まれるデータファイルを```load_img()```メソッドを使って取得し、```batch_lab```に保持する。
+            * 取得する際はJPEGなどの画像形式からndarrayに```img_to_array()```メソッドを使って変換し、かつ```cv2.cvtColor()```メソッドで色表現の方式をRGBからLABに変更する。
+            * 取得した画像1枚ごとのndarrayのshapeは(224, 224, 3)となっている(タテ×ヨコ×色チャンネル)。
+            * ```batch_lab```は```np.stack()```メソッドを使用し、これらの画像をバッチサイズ分新しい軸(axis)方向にstackする。よって、```batch_lab```のshapeは(batch_size, 224, 224, 3)となる。
+            * 次に```batch_lab```をLABのLとAB成分に分け、```batch_l```、```batch_ab```にそれぞれ保持する。
+            * LとABの成分は(batch_size, 224, 224, 3)の最後の3チャンネルのうち、1～3番目の要素がそれぞれL、A, Bなので、```batch_l```、```batch_ab```はそれぞれ、```batch_lab[:,:,:,0:1]```、```batch_lab[:,:,:,1:]```として取得する。
+            * ```generator_with_preprocessing()```メソッドは```yield```を使い、生成した```batch_l```、```batch_ab```を関数の返り値として返し、その時点での```batch_l```、```batch_ab```を返す。
 
 
 
