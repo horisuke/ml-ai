@@ -2070,6 +2070,8 @@
            autoencoder.add(Conv2DTranspose(64, (3,3), (2,2), activation='relu', padding='same'))
            autoencoder.add(Conv2DTranspose(32, (3,3), (2,2), activation='relu', padding='same'))
            autoencoder.add(Conv2D(2, (1,1), (1,1), activation='relu', padding='same'))
+
+           # Setting for learning
            autoencoder.compile(optimizer='adam', loss='mse')
            autoencoder.summary()
 
@@ -2083,12 +2085,14 @@
            val_steps = math.ceil(len(val_lists)/batch_size)
            test_steps = math.ceil(len(test_lists)/batch_size)
 
-           # d
+           # Learn the model
            epochs = 10
            autoencoder.fit_generator(generator=train_gen, steps_per_epoch=train_steps, epochs=epochs, validation_data=val_gen, validation_steps=val_steps)
 
-           # e
+           # Predict using the learned network
            preds = autoencoder.predict_generator(test_gen, steps=test_steps, verbose=0)
+
+           # Post processing - pick up "AB" components from test data as y_test
            x_test = []
            y_test = []
            for i, (l, ab) in enumerate(generator_with_preprocessing(test_lists, batch_size)):
@@ -2099,15 +2103,17 @@
            x_test = np.vstack(x_test)
            y_test = np.vstack(y_test)
 
-           # f
+           # Post processing - concatenate "L" as x_test & "AB" as preds
            test_preds_lab = np.concatenate((x_test, preds), 3).astype(np.uint8)
+
+           # Post processing - change color space from LAB to RGB
            test_preds_rgb = []
            for i in range(test_preds_lab.shape[0]):
                preds_rgb = lab2rgb(test_preds_lab[i,:,:,:])
                test_preds_rgb.append(preds_rgb)
            test_preds_rgb = np.stack(test_preds_rgb)
 
-           # g
+           # Display the result of prediction
            ```
         * まず、'img/colorize'以下にデータセットを配置する。
         * ```os.path.join()```メソッドでデータセットを配置したパスとデータセットのファイル名を結合し、引数にマッチするパスをリスト```data_lists```として取得する。
@@ -2139,6 +2145,35 @@
             * 次に```batch_lab```をLABのLとAB成分に分け、```batch_l```、```batch_ab```にそれぞれ保持する。
             * LとABの成分は(batch_size, 224, 224, 3)の最後の3チャンネルのうち、1～3番目の要素がそれぞれL、A, Bなので、```batch_l```、```batch_ab```はそれぞれ、```batch_lab[:,:,:,0:1]```、```batch_lab[:,:,:,1:]```として取得する。
             * ```generator_with_preprocessing()```メソッドは```yield```を使い、生成した```batch_l```、```batch_ab```を関数の返り値として返し、その時点での```batch_l```、```batch_ab```を返す。
+        * 学習・検証・評価に使用するgeneratorはそれぞれ、```train_gen```、```val_gen```、```test_gen```として、```generator_with_preprocessing()```メソッドを使用して生成する。
+        * パラメータはそれぞれ、```train_lists```、```val_lists```、```test_lists```と```batch_size```を渡し、```train_gen```のみ```shuffle=True```として生成する。
+        * 学習・検証・評価のステップ数は各listの大きさを```batch_size```で割り、```math.ceil()```メソッドでその値以上の最大整数を取得して生成する。
+        * 実際の学習はgeneratorを使用して行うので、```autoencoder.fit_generator()```メソッドを使用する。
+        * パラメータとして、学習データのGenerator、epochごとのサンプルサイズ、epoch数、検証用データ、検証時のStep数を渡す。
+        * 次に学習したモデルによる予測を```predict_generator()```メソッドを使って行う。
+        * パラメータとして、評価データのGenerator、評価時のStep数を渡す。
+        * 予測結果は```predict_generator()```メソッドの返り値を```preds```として保持する。
+        * 次に後処理として、ネットワークのテストデータの入力「L」とその予測結果の「A」、「B」を結合するために、テスト用Generatorを使い、「A」、「B」を取り出す。
+        * for文を```test_steps```分回し、「L」成分と「AB」成分を取り出し、それぞれ、```x_test```、```y_test```のリストにappnedして保持する(```y_test```は以降、使用しない)。
+        * この時点で```x_test```のshapeは(2932, 224, 224, 1)となる。224×224の大きさの画像サイズに対し、「L」成分のみを持つデータが2932枚(≒```test_steps```×```batch_size```)分存在していることを意味する。
+        * for文を回す際には```generator_with_preprocessing```メソッドを使用するが、```enumerate()```を使用することにより、for文を回した回数となるindexも取得できる。
+        * このindexを```test_steps```と比較することでfor文をbreakするために使用している。
+        * 取得した```x_test```、```y_test```は```np.vstack()```メソッドを使用し、1×nのリストn×1配列に変換する。
+        * 次に```np.concatenate()```メソッドを使用し、取り出した```x_test```(テストデータの「L」)と学習したモデルを使った「AB」の予測データ```preds```を結合する。
+        * ```axis```は3とし、各配列の「L」、「AB」にあたる部分を指定して結合し、```test_preds_lab```に保持する。
+        * 最後に```test_preds_lab```の色空間をRGBに変換し、変換後のデータを```test_preds_rgb```として保持する。
+        * ```test_preds_lab.shape[0]```(=```test_steps```×```batch_size```)を```range()```メソッドに渡し、テストデータの数分だけfor文を回す。
+        * for文内では```lab2rgb()```メソッドを使い色空間をLAB→RGBに変換し、```test_preds_rgb```にappendしていく。
+        * 最後に```np.stack()```に渡し、n×1配列に変換する。
+    * 自動着色タスクの結果
+        * 今回のモデルはかなりシンプルなものであるため、うまく着色できていないケースもある。
+        * 以下のような工夫を加えると、よりリアルな画像を生成することができる。
+            * モデルの出力の離散化(分割)
+                * 上記のモデルでは損失関数を「AB」空間でMSEに設定したが、「AB」空間を離散(分割)して、分類問題として解くことで、色がぼけずにリアルな着色ができる。
+            * GANと組み合わせる
+                * GANにより、自動着色か本物かを判別するモデルを加えることで、より本物に近い自動着色を実現できる。
+* 超解像
+    * a
 
 
 
