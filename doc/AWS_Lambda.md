@@ -546,7 +546,71 @@ def myfunc_handler(event, context):
 * 具体的な"event"のデータ構造は各イベントソース側のドキュメントを確認する必要がある。
 
 ##### 3-5. 定期的にLambda関数を実行する例
+* 以下では非同期実行の例を示す。5分ごとに実行するLambda関数を考える。
+* EC2インスタンスにおけるcronによる定期実行機能をLambdaで構成する。
+* ここでは"Hello"という文字列とイベント引数として渡された値をCloudWatchLogsに書き込むという処理をLambda関数で行う。
+
+###### 3-5-1. Lambda関数を一定時間ごとに実行する
+* 一定時間ごとにLambda関数を実行する場合は、イベントソースとして、「CloudWatchイベント」を使用する。
+* CloudWatchイベントには「スケジュール」と呼ばれるルールタイプが用意されており、cronのような「毎月xx日」「毎日○時」といった形式に加え、「何分ごと」「何日ごと」といった周期的なスケジュールを構成できる。
+* ひとつのCloudWatchイベントに最大5つのLambda関数を結びつけることができる。
+
+###### 3-5-2. lambda-canary設計図から作成する, 3-5-3. Lambda関数を作る
+* CloudWatchイベントから実行されるLambda関数は「lambda-canary」という設計図から簡単に構成することできる。
+* Lambdaコンソールから"関数"メニューを選び、"関数の作成"を選択する。
+* "関数の作成"ページで"設計図"を選択し、"lambda-canary-python3"を検索し、選択する。
+* "関数の作成"の"設計図lambda-canary-python3の使用"ペーの"基本的な情報"セクションで以下を選択・入力する。
+    * 名前：MyScheduledFunction
+    * ロール：既存のロールを選択
+    * 既存のロール：role-lambdaexec
+* "CloudWatch Eventsトリガー"セクションで以下を選択・入力する。
+    * ルール：新規ルールの作成
+    * ルール名：MyScheduleRule
+    * ルールの説明：(空欄)
+    * ルールタイプ：スケジュール式
+    * スケジュール式：cron(0/5 * * * ? * )
+    * トリガの有効化：チェックを外す
+* 次にLambda関数の実装を記載するが、"lambda-canary-python3"をベースに関数を作成すると、"Lambda関数のコード"セクションには「環境変数で指定したWebページにアクセスし、そのWebページに特定の文字列が存在するかを確認する」というサンプルが予め記載されている。
+* 一旦関数を作成しないと関数の実装は変更できないので、"関数の作成"を選択。
+* その後、サイドパネルの"関数"から作成した"MyScheduledFunction"を選択する。
+* 今回はHelloという文字列と渡されたイベント引数をCloudWatchLogsに書き込む処理をLambda関数で実装したいため、"関数コード"セクションで以下のように修正する。
+    ```python
+    import json
+
+    def lambda_handler(event, context):
+        print('Hello')
+        print(json.dumps(event))
+    ```
+* "環境変数"セクションにはサンプルコードの環境変数が入力されているので、"削除"を選択する。
+* 上記の変更を行い、上部の"保存"を選択し、関数を保存する。
+
+###### 3-5-4. 動作テスト
+* 上部の"テストイベントの選択"プルダウンから"テストイベントの設定"を選択する。
+* テストイベントの設定画面では既に以下が選択されている。
+    * "新しいテストイベントの作成"
+    * イベントテンプレート：Amazon CloudWatch
+* また既にスケジュールイベント用の設定が記載されているので、イベント名として"MyScheduleLambdaTestEvent"を入力して、"作成"を選択する。
+* テストイベントが作成されたことを確認の上、上部の"テスト"を選択する。
+* 実行が成功し、"詳細"に以下のようにログが表示され、Helloという文字列とevent引数の中身が表示されていることを確認する。
+    ```
+    START RequestId: 249ec472-ef35-11e8-8db1-fb94ebab1769 Version: $LATEST
+    Hello
+    {"id": "cdc73f9d-aea9-11e3-9d5a-835b769c0d9c", "detail-type": "Scheduled Event", "source": "aws.events", "account": "{{account-id}}", "time": "1970-01-01T00:00:00Z", "region": "ap-northeast-1", "resources": ["arn:aws:events:ap-northeast-1:123456789012:rule/ExampleRule"], "detail": {}}
+    END RequestId: 249ec472-ef35-11e8-8db1-fb94ebab1769
+    REPORT RequestId: 249ec472-ef35-11e8-8db1-fb94ebab1769	Duration: 0.81 ms	Billed Duration: 100 ms 	Memory Size: 128 MB	Max Memory Used: 21 MB
+    ```
+* リンクからClouwdWatch Management Consoleを開き、同様の内容を確認することもできる。
+
+###### 3-5-5. スケジュールを有効化する
+* 動作確認をして問題なければ、CloudWatchイベントを有効化する。
 * a
+
+
+
+
+
+
+
 
 
 
