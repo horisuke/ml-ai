@@ -603,7 +603,22 @@ def myfunc_handler(event, context):
 
 ###### 3-5-5. スケジュールを有効化する
 * 動作確認をして問題なければ、CloudWatchイベントを有効化する。
-* a
+* "MyScheduledFunction"関数を選択し、"Designer"セクションでトリガーとして追加されている"CloudWatch Events"を選択する。
+* "CloudWatch Events"が表示され、作成したルール"MyScheduleRule"を有効し、画面上部の"保存"で変更を保存する。
+* "cron(0/5 * * * ? * )"でルールを設定しているので、00分、05分、10分...になるのを待つ。
+* 実際にLambda関数が停機実行されているかはClouwdWatchで確認する。
+* AWSコンソールからCloudWatchを選択し、サイドパネルメニューから"ログ"を選択する。
+* ロググループ"/aws/lambda/MyScheduledFunction"を開く。
+* 対象のログストリームを選択し、内容を確認すると、Lambda関数が定期実行され、Helloという文字列とevent引数の内容が表示されていることを確認。
+* 確認が完了したらCloudWatchイベントを無効に戻しておく。
+* また、CloudWatchイベントではCloudWatchコンソールからLambda関数に渡す引数は任意に変更することができる。a
+
+##### 3-6. まとめ
+* 省略
+
+#### 4. S3のイベント処理
+
+##### 4-1. S3のイベント事例
 
 
 
@@ -618,7 +633,4 @@ def myfunc_handler(event, context):
 
 
 
-
-
-
-#### 4. aa
+#### 5. aa
