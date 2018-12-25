@@ -343,5 +343,26 @@ Y_pred = svc.predict(X_test)
 print("-----------------svc.score(X_train, Y_train)")
 print(svc.score(X_train, Y_train))
 
+# Random Forests
+random_forest = RandomForestClassifier(n_estimators=100)
+random_forest.fit(X_train, Y_train)
+Y_pred = random_forest.predict(X_test)
+print("-----------------random_forest.score(X_train, Y_train)")
+print(random_forest.score(X_train, Y_train))
+
+# k-nearest neighbor algorithm
+knn = KNeighborsClassifier(n_neighbors = 3)
+knn.fit(X_train, Y_train)
+Y_pred = knn.predict(X_test)
+print("-----------------knn.score(X_train, Y_train)")
+print(knn.score(X_train, Y_train))
+
+# Gaussian Naive Bayes
+gaussian = GaussianNB()
+gaussian.fit(X_train, Y_train)
+Y_pred = gaussian.predict(X_test)
+print("-----------------gaussian.score(X_train, Y_train)")
+print(gaussian.score(X_train, Y_train))
+
 
 
