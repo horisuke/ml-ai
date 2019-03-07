@@ -5,3 +5,4 @@ from keras.datasets import cifar100
 
 print("Hello!")
 print("pi = " + str(ma.pi))
+print("End")
