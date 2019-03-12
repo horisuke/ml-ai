@@ -1,4 +1,4 @@
-# Sample Project実行
+# Sample Project実行(NN)
 * NNCにログイン
 * Project画面を表示し、"tutorial.basics.01_logistic_regression"を選択。
 * "You can create a new project from this sample project. Enter a new project name between 1 and 255 characters log."と表示されるので、"tutorial.basics.01_logistic_regression-trial"として、OKを選択。
@@ -135,5 +135,122 @@
             * Accuraccy：
                 * 作成モデルのAccuracy：(237+238)÷(237+238+12+13) = 475÷500 = 0.95
 * 画面左側/上部にはTRAININGタブと同様、過去の学習結果一覧・及び学習の進捗情報が表示される。
-* 画面上を右クリックすることでSave CSV as...のコンテキストが表示され、CSV形式で評価結果を保存することが可能。
-* ★★～P.93★★
+* 画面上を右クリックすることでSave CSV as...のコンテキストが表示され、CSV形式でConfusionMatrixを保存することが可能。
+
+
+# Sample Project実行(CNN)
+* NNCにログイン
+* Project画面を表示し、"tutorial.basics.02_binary_cnn"を選択。
+* "You can create a new project from this sample project. Enter a new project name between 1 and 255 characters log."と表示されるので、"tutorial.basics.02_binary_cnn-trial"として、OKを選択。
+* 作成したプロジェクトがリストされるので、選択すると、EDIT画面に遷移する。
+* EDIT画面には既に作成済みのニューラルネットワークが表示される。
+* ここでもNNの場合と同様、はSmall MNISTを学習データセットとして使用する。
+* DATASETタブを選択し、Small MNISTを確認できる。学習・評価データ共にNNと同じものを使用する。
+* EDITタブを選択し、作成済みネットワークを表示し、構成を確認する。
+* 作成済みネットワークは大きく入力層(I)と畳み込み層1(C・M・T)、畳み込み層2(C・M・T)、全結合層(A・T)、出力層(A・S・B)から成る。
+* 次にCONFIGタブを選択し、学習条件を確認する。
+* NNの場合と設定画面は同様で、ここでは設定は変更せず、デフォルト設定のままとする。
+* 次にEDITタブを選択し、右側のRunボタンを選択することで学習を実行する。
+* TRAINING画面に遷移し、学習が始まる。
+* 以下のようなログが出力され、学習が終了する。
+    ```
+    2019-03-12 07:17:08,503 [worker]: [INFO]: download: 13631/configurations/44916/data.sdcproj to work/data.sdcproj
+    2019-03-12 07:17:09,042 [worker]: [INFO]: sdeep_console_cli_util create_prototxt -i "/home/nnabla/work/data.sdcproj" -o "/home/nnabla/work/network.prototxt" -p "/home/nnabla/work/param_assign.csv"
+    2019-03-12 07:17:09,137 [worker]: [INFO]: sdeep_console_cli_util create_result_ini -i "/home/nnabla/work/data.sdcproj" -y "/home/nnabla/empty_monitoring_report.yml" -o "/home/nnabla/work/result.ini"
+    2019-03-12 07:17:09,240 [worker]: [INFO]: nnabla_cli train -c /home/nnabla/work/network.prototxt -o /home/nnabla/results -s /home/nnabla/work/data.sdcproj -a /home/nnabla/work/param_assign.csv
+    2019-03-12 07:17:10,120 [nnabla]: Train with contexts ['cpu']
+    2019-03-12 07:17:10,156 [nnabla]: Training epoch 1 of 100 begin
+    2019-03-12 07:17:11,534 [nnabla]: epoch 1 of 100 cost=0.500818  {train_error=0.352672, valid_error=0.391087} time=(0.8s /78.6s)
+    2019-03-12 07:17:12,642 [nnabla]: epoch 2 of 100 cost=0.286012  {train_error=0.215833, valid_error=0.256652} time=(2.0s /101.9s)
+    2019-03-12 07:17:13,743 [nnabla]: epoch 3 of 100 cost=0.183753  {train_error=0.158449, valid_error=0.205073} time=(3.1s /104.9s)
+    2019-03-12 07:17:15,728 [nnabla]: epoch 4 of 100 cost=0.134087  {train_error=0.118959, valid_error=0.156219} time=(4.9s /121.8s)
+    2019-03-12 07:17:17,389 [nnabla]: epoch 5 of 100 cost=0.105694  {train_error=0.089929, valid_error=0.122632} time=(6.7s /133.9s)
+    2019-03-12 07:17:18,058 [nnabla]: epoch 6 of 100 cost=0.086228  time=(7.9s /131.5s)
+    2019-03-12 07:17:18,727 [nnabla]: epoch 7 of 100 cost=0.076900  time=(8.6s /122.3s)
+    2019-03-12 07:17:19,395 [nnabla]: epoch 8 of 100 cost=0.060771  time=(9.2s /115.4s)
+    2019-03-12 07:17:20,061 [nnabla]: epoch 9 of 100 cost=0.061615  time=(9.9s /110.0s)
+    2019-03-12 07:17:21,520 [nnabla]: epoch 10 of 100 cost=0.046809  {train_error=0.043224, valid_error=0.083557} time=(10.9s /108.5s)
+    2019-03-12 07:17:22,229 [nnabla]: epoch 11 of 100 cost=0.043935  time=(12.1s /109.7s)
+    2019-03-12 07:17:23,282 [nnabla]: epoch 12 of 100 cost=0.036136  time=(13.1s /109.3s)
+    ・・・
+    2019-03-12 07:18:32,290 [nnabla]: epoch 88 of 100 cost=0.000724  time=(82.1s /93.3s)
+    2019-03-12 07:18:32,958 [nnabla]: epoch 89 of 100 cost=0.000680  time=(82.8s /93.0s)
+    2019-03-12 07:18:34,077 [nnabla]: epoch 90 of 100 cost=0.000683  {train_error=0.000680, valid_error=0.051400} time=(83.5s /92.7s)
+    2019-03-12 07:18:35,158 [nnabla]: epoch 91 of 100 cost=0.000686  time=(85.0s /93.4s)
+    2019-03-12 07:18:36,730 [nnabla]: epoch 92 of 100 cost=0.000635  time=(86.6s /94.1s)
+    2019-03-12 07:18:37,793 [nnabla]: epoch 93 of 100 cost=0.000657  time=(87.6s /94.2s)
+    2019-03-12 07:18:38,458 [nnabla]: epoch 94 of 100 cost=0.000616  time=(88.3s /93.9s)
+    2019-03-12 07:18:39,119 [nnabla]: epoch 95 of 100 cost=0.000616  time=(89.0s /93.6s)
+    2019-03-12 07:18:39,782 [nnabla]: epoch 96 of 100 cost=0.000617  time=(89.6s /93.4s)
+    2019-03-12 07:18:40,447 [nnabla]: epoch 97 of 100 cost=0.000568  time=(90.3s /93.1s)
+    2019-03-12 07:18:41,116 [nnabla]: epoch 98 of 100 cost=0.000581  time=(91.0s /92.8s)
+    2019-03-12 07:18:41,820 [nnabla]: epoch 99 of 100 cost=0.000573  time=(91.7s /92.6s)
+    2019-03-12 07:18:43,265 [nnabla]: epoch 100 of 100 cost=0.000545  {train_error=0.000550, valid_error=0.035466} time=(92.7s /92.7s)
+    2019-03-12 07:18:43,265 [nnabla]: Training Completed.
+    NNabla command line interface (Version 1.0.5.console_day3-fix-181220, Build 181219104847)
+    2019-03-12 07:18:46,092 [worker]: [INFO]: create result_train.nnp
+    2019-03-12 07:18:47,220 [worker]: [INFO]: create result.nnb
+    2019-03-12 07:18:50,236 [worker]: [INFO]: create result.onnx
+    2019-03-12 07:18:52,548 [worker]: [INFO]: worker done
+    ```
+* またNNの場合と同様、学習カーブとして、以下のグラフが表示される。
+    * cost
+    * Training Error(学習誤差曲線)
+    * validation Error(評価誤差曲線)
+* グラフからNNの場合と比べ、早いepochで誤差が収束していることが分かる。
+* 画面左側の過去の学習結果が一覧、画面上部には学習の進捗情報の表示はNNの場合と同じ。
+* 次に作成したモデルの評価を実行する。
+* TRAININGタブ右側のRunボタンを選択することでモデルの評価が開始される。
+* EVALUATION画面に遷移し、モデルの評価が始まる。
+* 以下のようなログが出力され、評価が終了する。
+    ```
+    2019-03-12 07:27:32,819 [worker]: [INFO]: download: 13631/configurations/44916/data.sdcproj to work/data.sdcproj
+    2019-03-12 07:27:33,388 [worker]: [INFO]: Find learned parameter file: results_current_100.nnp
+    2019-03-12 07:27:34,460 [worker]: [INFO]: download: 13631/results/44916/result.nnp to results/result.nnp
+    2019-03-12 07:27:35,082 [worker]: [INFO]: download: 13631/results/44916/results_best_100.nnp to results/results_best_100.nnp
+    2019-03-12 07:27:35,706 [worker]: [INFO]: download: 13631/results/44916/results_current_100.nnp to results/results_current_100.nnp
+    2019-03-12 07:27:35,710 [worker]: [INFO]: Use config file: 13631/results/44916/results_current_100.nnp, instead of config file: 13631/configurations/44916/data.sdcproj
+    2019-03-12 07:27:35,751 [worker]: [INFO]: nnabla_cli forward -c /home/nnabla/results/results_current_100.nnp -d /dataset-cache/ccbf15a0-bcb6-4ba6-b10e-27fc877c4348/2.cache -o /home/nnabla/results
+    2019-03-12 07:27:37,264 [nnabla]: data 64 / 500
+    2019-03-12 07:27:37,284 [nnabla]: data 128 / 500
+    2019-03-12 07:27:37,306 [nnabla]: data 192 / 500
+    2019-03-12 07:27:37,327 [nnabla]: data 256 / 500
+    2019-03-12 07:27:37,347 [nnabla]: data 320 / 500
+    2019-03-12 07:27:37,368 [nnabla]: data 384 / 500
+    2019-03-12 07:27:37,386 [nnabla]: data 448 / 500
+    2019-03-12 07:27:37,401 [nnabla]: data 500 / 500
+    2019-03-12 07:27:37,414 [nnabla]: Add output_result.zip to result.nnp.
+    2019-03-12 07:27:37,414 [nnabla]: Add output_result.zip to results_current_100.nnp.
+    2019-03-12 07:27:37,415 [nnabla]: Add output_result.zip to results_best_100.nnp.
+    2019-03-12 07:27:37,415 [nnabla]: Forward Completed.
+    NNabla command line interface (Version 1.0.5.console_day3-fix-181220, Build 181219104847)
+    2019-03-12 07:27:38,118 [worker]: [INFO]: upload: results/output_result.csv to 13631/results/44916/output_result.csv
+    2019-03-12 07:27:38,123 [worker]: [INFO]: create confusion_matrix.json
+    2019-03-12 07:27:38,176 [worker]: [INFO]: confusion_matrix.json created
+    2019-03-12 07:27:38,873 [worker]: [INFO]: upload: work/confusion_matrix.json to 13631/results/44916/confusion_matrix.json
+    2019-03-12 07:27:39,420 [worker]: [INFO]: upload: results/result.nnp to 13631/results/44916/result.nnp
+    2019-03-12 07:27:39,942 [worker]: [INFO]: upload: results/results_best_100.nnp to 13631/results/44916/results_best_100.nnp
+    2019-03-12 07:27:40,546 [worker]: [INFO]: upload: results/results_current_100.nnp to 13631/results/44916/results_current_100.nnp
+    2019-03-12 07:27:40,550 [worker]: [INFO]: create result_evaluate.nnp
+    2019-03-12 07:27:46,681 [worker]: [INFO]: Completed to pageing file creator.
+    2019-03-12 07:27:46,685 [worker]: [INFO]: worker done
+    ```
+* NNの場合と同様、評価結果として以下を選択して表示することができる。
+    * Output Result
+    * Confusion Matrix
+* 画面左側/上部には過去の学習結果一覧・及び学習の進捗情報が表示される。
+* 画面上を右クリックすることでSave CSV as...のコンテキストが表示され、CSV形式でConfusionMatrixを保存することが可能。
+* また、Recall/Precision/Accuracyはそれぞれ以下の通りとなる。
+    * Recall：
+        * 4の画像に対するRecall：246÷(246+4) = 246÷250 ≒ 0.984
+        * 9の画像に対するRecall：246÷(246+4) = 246÷250 ≒ 0.984
+    * Precision：
+        * 4の画像に対するPrecision：246÷(246+4) = 237÷250 ≒ 0.984
+        * 9の画像に対するPrecision：238÷(246+4) = 238÷250 ≒ 0.984
+    * Accuraccy：
+        * 作成モデルのAccuracy：(246+246)÷(246+246+4+4) = 492÷500 = 0.984
+* 上記の結果はNNの場合と比べ、より高い精度を得ることができていることが分かる。
+* ★★～P.100★★
+
+# Sample Project実行(Iris)
+aa
