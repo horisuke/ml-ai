@@ -57,11 +57,110 @@
 # カウントベースの手法
 * カウントベースの手法ではコーパス(corpus)を使用する。
 * コーパスとは大量のテキストデータであるが、やみくもに集められたテキストデータではなく、自然言語処理の研究やアプリケーション開発のために目的をもって収集されたテキストデータのことを呼ぶ.
-* ★★～P.62★★
+* コーパスはテキストデータに過ぎず、含まれる文章は人の手によって書かれたものである。
+* これはコーパスに自然言語に対する人間の知識(文章の書き方、単語の選び方、単語の意味)が含まれていることを意味する。
+* カウントベースの手法では人間の知識が詰まったコーパスから自動的かつ効率的にそのエッセンスを抽出することを行う。
+* 自然言語処理分野で用いられるコーパスにはテキストデータに対してさらに追加の情報が付与されていることがある。
+* 例えば、テキストデータの個々の単語に対して、品詞がラベル付けされているケースなどがある。
+* その場合、コンピュータが扱いやすいようにコーパスが機構造などのデータ形式として構造化されていることが一般的である。
+* 自然言語処理分野で用いられるコーパスには様々なものが存在し、WikipediaやGoogle Newsなどのテキストデータや、シェクスピアや夏目漱石などの偉大な作家の作品群がコーパスとして有名である。
+* ここではまずはじめに1文からなる単純な以下のようなテキストをコーパスとして利用する。
+    ```python
+    >>> text = 'You say goodbye and I say hello.'
+    ```
+* 次にPythonの対話モードで小さなテキストデータに前処理(テキストデータを単語に分割し、その分割した単語を単語IDのリストへ変換)を行う。
+    ```python
+    >>> text = text.lower()
+    >>> text = text.replace('.', '. ')
+    >>> text
+    'you say goodbye and i say hello .'
+
+    >>> words = text,split(' ')
+    >>> words
+    ['you', 'say', 'goodbye', 'and', 'i', 'say', 'hello', '.']
+    ```
+* 上記では、まずlower()で全て小文字に変換し、ピリオドの前にスペースを挿入する。
+    * 実際はより賢く汎用的なやり方として正規表現を使用する方法がある。
+    * reモジュールをimportし、re.split('(\W+)?', text)とすることで単語単位に分割できる。
+* 次にsplit()でスペースを区切り文字として、単語に分割し、wordsというリストに各単語を要素として保持する。
+* これで元の文章を単語のリストとして使用できるようになる。
+* ただ単語をテキストのまま操作するのは不便なため、単語にIDを振り、IDのリストとして使用できるようにする。
+* まず以下の通り、単語のIDと単語の対応表をPythonのディクショナリで作成する。
+    ```python
+    >>> word_to_id = {}
+    >>> id_to_word = {}
+    >>>
+    >>> for word in words:
+            if word not in word_to_id:
+                new_id = len(word_to_id)
+                word_to_id[word] = new_id
+                id_to_word[new_id] = word
+    ```
+* id_to_wordにはキーを単語ID、値を単語として保持し、word_to_idにはキーを単語、値を単語IDとして保持する。
+* if文では単語がword_to_idにまだ保持されていない場合にword_to_idの要素数をnew_idとして払い出し、word_to_idにそのnew_idを値として追加する。
+* id_to_wordにはそのnew_idをキーとしてwordを追加する。
+* 上述のtextの文はid_to_word、word_to_idにそれぞれ以下のように保持される。
+    ```python
+    >>> id_to_word
+    {0:'you', 1:'say', 2:'goodbye', 3:'and', 4:'i', 5:'hello', 6:'.'}
+    >>> word_to_id
+    {'you':0, 'say':1, 'goodbye':2, 'and':3, 'i':4, 'hello':5, '.':6}
+    ```
+* これらのディクショナリを使うことにより、単語から単語IDを検索したり、単語IDから単語を検索したりできる。
+    ```python
+    >>> id_to_word[1]
+    'say'
+    >>> word_to_id['hello ']
+    5
+    ```
+* 最後に以下の通り、単語のリストwordsを単語IDのリストcorpusに変換し、その結果をNumpy配列にして保持する。
+    ```python
+    >>> import numpy as np
+    >>> corpus = [word_to_id[w] for w in words]
+    >>> corpus = np.array(corpus)
+    >>> corpus
+    array([0,1, 2, 3, 4, 1, 5, 6])
+    ```
+* for文の内包表記ではwordsの先頭から要素の値を順に取り出してwに格納し、そのwをキーとしてword_to_idの値、つまり単語IDを取得する。
+* 取得した単語idはcorpusにリストとして保持される。
+* 次の処理でcorpusはnp.array()でNumpy配列に変換される。
+* ここまでの処理を前処理として、preprocess()という関数にしてまとめて実装すると、以下のようになる。
+    ```python
+    def preprocess(text):
+        text = text.lower()
+        text = text.replace('.', '. ')
+        words = text,split(' ')
+
+        word_to_id = {}
+        id_to_word = {}
+        for word in words:
+            if word not in word_to_id:
+                new_id = len(word_to_id)
+                word_to_id[word] = new_id
+                id_to_word[new_id] = word
+
+        corpus = np.array([word_to_id[w] for w in words])
+
+    return corpus, word_to_id, id_to_word
+    ```
+* この関数を使用すると、コーパスの前処理は以下のようになる。
+    ```python
+    >>> text = 'You say goodbye and I say hello.'
+    >>> corpus, word_to_id, id_to_word = preprocess(text)
+    ```
+* ここまででコーパスを扱う準備が整ったので、これを用い、単語の意味を抽出する。
+* ここでカウントベースの手法を用い、単語をベクトルで表すことを行なう。
+* ベクトル表現の例として「色」を考える。
+* ★★～P.66★★
 
 
 
 
+# Method
+* P.64：text.lower()
+* P.64：text.replace('.', '. ')
+* P.64：text,split(' ')
+* P.66：[word_to_id[w] for w in words]　※内包表記
 
 
 
