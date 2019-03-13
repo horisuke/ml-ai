@@ -171,8 +171,164 @@
 * つまりウィンドウサイズが2の場合、左右のそれぞれ2単語がコンテキストとなる。
 * ウィンドウサイズは左右均等である必要はなく、どちらか一方だけをコンテキストとする、といったことや分の区切りを考慮したコンテキストを考える、といったこともできる。
 * 上記をもとに分布仮説に基づいて単語をベクトルで表現する方法を考える。
+* もっとも単純な方法はある単語の周囲にどのような単語がどの程度出現するかをカウントし、それを集計することである。
+* まず前述のpreprocess()関数を使って下準備を行う。
+    ```python
+    import sys
+    sys.path.append('..')
+    import numpy as np
+    from common.util import preprocess
+
+    text = 'You say goodbye and I say hello.'
+    corpus, word_to_id, id_to_word = preprocess(text)
+
+    print(corpus)
+    # [0,1, 2, 3, 4, 1, 5, 6]
+
+    print(id_to_word)
+    # {0:'you', 1:'say', 2:'goodbye', 3:'and', 4:'i', 5:'hello', 6:'.'}
+    ```
+* 上記より、textは単語数は8、語彙数は7であることがわかる。
+* この各単語について、ウィンドウサイズを1とし、コンテキストに含まれる単語の頻度を数えると以下のようになる。
+    |         | you   | say   | goodbye | and   | i     | hello | .     |
+    |:-------:|:-----:|:-----:|:-------:|:-----:|:-----:|:-----:|:-----:|
+    | you     | 0     | 1     | 0       | 0     | 0     | 0     | 0     |
+    | say     | 1     | 0     | 1       | 0     | 1     | 1     | 0     |
+    | goodbye | 0     | 1     | 0       | 1     | 0     | 0     | 0     |
+    | and     | 0     | 0     | 1       | 0     | 1     | 0     | 0     |
+    | i       | 0     | 1     | 0       | 1     | 0     | 0     | 0     |
+    | hello   | 0     | 1     | 0       | 0     | 0     | 0     | 1     |
+    | .       | 0     | 0     | 0       | 0     | 0     | 1     | 0     |
+* 1行目の'you'は隣り合っている'say'のみがコンテキストとなるため、1となり、それ以外の単語は0となる。
+* これは同時に'you'という単語が[0, 1, 0, 0, 0, 0, 0]というベクトルで表現できることを意味している。
+* これを全ての語彙に対して行ない作成されるテーブルを共起行列(co-occurence matrix)と呼ぶ。
+* この共起行列をnp.arrayで定義すると以下のようになる。
+    ```python
+    C = np.array([
+        [0, 1, 0, 0, 0, 0, 0],
+        [1, 0, 1, 0, 1, 1, 0],
+        [0, 1, 0, 1, 0, 0, 0],
+        [0, 0, 1, 0, 1, 0, 0],
+        [0, 1, 0, 1, 0, 0, 0],
+        [0, 1, 0, 0, 0, 0, 1],
+        [0, 0, 0, 0, 0, 1, 0]
+    ], dtype=np.int32)
+    ```
+* この共起行列を使うことで以下の通り、各単語のベクトルを取得することができる。
+    ```
+    print(C[0]) # 単語IDが0のベクトル
+    # [0, 1, 0, 0, 0, 0, 0]
+
+    print(C[4])  # 単語IDが4のベクトル
+    # [0, 1, 0, 1, 0, 0, 0]
+
+    print(C[word_to_id['goodbye']]) # 'goodbyeのベクトル'
+    # [0, 1, 0, 1, 0, 0, 0]
+    ```
+* これを踏まえ、コーパスから共起行列を作る関数create_co_matrix()を実装する。
+    * create_co_matrix(corpus, vocab_size, window_size=1)
+        * corpus：単語IDのリスト
+        * vocab_size：語彙数
+        * window_size：ウィンドウサイズ
+    ```python
+    def create_co_matrix(corpus, vocab_size, window_size=1):
+        corpus_size = len(corpus)
+        co_matrix = np.zeors((vocab_size, vocab_size), dtype=np.int32)
+
+        for idx, word_id in enumerate(corpus):
+            for i in range(1, window_size+1):
+                left_idx = idx - i
+                right_idx = idx + i
+
+                if left_idx >= 0:
+                    left_word_id = corpus[left_idx]
+                    co_matrix[word_id, left_word_id] += 1
+                
+                if right_idx < corpus_size:
+                    right_word_id = corpus[right_idx]
+                    co_matrix[word_id, right_word_id] += 1
+
+        return co_matrix
+    ```
+* まず語彙数×語彙数の大きさの2次元配列を全要素を0で初期化そて生成する。
+* 次にコーパス中の各単語に対して、そのウィンドウに含まれる単語をカウントしていく。
+* ただし、コーパスの右端・左端のはみ出しチェックを行い、はみ出していない単語のみカウントする。
+* この関数を用いることで任意の大きさのコーパスに対する共起行列を生成することができる。
+* 次にベクトル間の類似度を計測する方法を考える。
+* 一般的には様々な方法があり、ベクトルの内積やユークリッド距離などが代表的な方法として挙げられる。
+* 単語のベクトル表現の類似度に関しては、コサイン類似度(cosine similarity)がよく用いられる。
+* コサイン類似度はベクトルx, yに対して、以下の(2.1)で定義される。
+    * similarity(x, y) = (x・y) / (||x| ||y||) = (x1y1 + x2y2 +・・・xnyn) / (√x1^2+・・・+xn^2 √y1^2+・・・+yn^2)　(2.1)
+        * x = (x1, x2, ... , xn)
+        * y = (y1, y2, ... , yn)
+* (2.1)は分子にベクトルの内積、分母に各ベクトルのノルムがある。
+* ノルムはベクトルの大きさを表したのもので、ここではL2ノルム(ベクトルの各要素の2乗和の平方根)を用いている。
+* これはベクトルを正規化して内積を取っていると言える。
+* コサイン類似度は直感的には2つのベクトルがどれだけ同じ方向を向いているかを表すものである。
+* 2つのベクトルが完全に同じ方向を向いている場合、コサイン類似度は1となり、完全に逆向きだと-1となる。
+* これにより、コサイン類似度を実装すると以下のようになる。
+    ```python
+    def cos_similarity(x, y):
+        nx = x / np.sqrt(np.sum(x**2))　＃xの正規化
+        ny = y / np.sqrt(np.sum(y**2))　＃yの正規化
+
+        return np.dot(nx, ny)
+    ```
+* 引数x, yはNumPy配列とし、x, yをそれぞれ正規化した後、両者の内積を求めている。
+* 一方、上記の実装だとx, ｙに0ベクトルが渡されてくると、0除算が発生してしまう。
+* ここでは、小さな値epsを1e-8とし、引数で指定できるようする。
+* 指定されたepsはnx, nyの分母の計算に必ず加算される値として実装する。
+* これを踏まえたcos_similarity()の改良版は以下の通りとなる。
+    ```python
+    def cos_similarity(x, y, eps=1e-8):
+        nx = x / np.sqrt(np.sum(x**2)) + eps)　＃xの正規化
+        ny = y / np.sqrt(np.sum(y**2)) + eps)　＃yの正規化
+
+        return np.dot(nx, ny)
+    ```
+* このcos_similarity()改良版を用いて、"you"と"i"の単語ベクトルの類似度を求める実装は以下の通りになる。
+    ```python
+    import sys
+    sys.path.append('..')
+    from common.util import preprocess, create_co_matrix, cos_similarity
+
+    text = 'You say goodbye and I say hello.'
+    corpus, word_to_id, id_to_word = preprocess(text)
+    vocab_size = len(word_to_id)
+    C = create_co_matrix(corpus, vocab_size)
+
+    c0 = C[wprd_to_id['you']] # 'you'の単語ベクトル
+    c1 = C[wprd_to_id['i']]   # 'i'の単語ベクトル
+    print(cos_similarity(c0, c1))
+    # 0.7071067691154799
+    ```
+* "you"と"i"の単語ベクトルの類似度は0.70...と言える。
+* コサイン類似度は1から-1までの値を取るので、この値は比較的高い値(=類似正がある)と言える。
+* 次にある単語がクエリとして与えられたとき、そのクエリに対して類似した単語を上位から順に表示する関数most_similar()を考える。
+    * most_similar()
+        * query：クエリ(単語)
+        * word_to_id：単語から単語IDへのディクショナリ
+        * id_to_word：単語IDから単語へのディクショナリ
+        * word_matrix：単語ベクトルをまとめた行列で各行に対応する単語のベクトルが格納
+        * top：取得する類似度のランキング
+* 実装は以下の通り。
+    ```python
+    def most_similar(query, word_to_id, id_to_word, word_matrix, top=5):
+        # Pick up the query
+        if query not in word_to_id:
+            print('%s is not found' % query)
+            return
+
+        print('\n[query] ' + query)
+        query_id = word_to_id[query]
+        query_vec = word_matrix[quiery_id]
+
+        # calculate cosine similarity
+        vocab_size = len(id_to_word)
+
+    ```
 * a
-* ★★～P.68★★
+* ★★～P.74★★
 
 
 
@@ -182,7 +338,8 @@
 * P.64：text.replace('.', '. ')
 * P.64：text,split(' ')
 * P.66：[word_to_id[w] for w in words]　※内包表記
-
+* P.69：sys.path.append('..')
+* P.72：enumerate(corpus)
 
 
 
