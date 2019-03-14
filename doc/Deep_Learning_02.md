@@ -309,7 +309,7 @@
         * query：クエリ(単語)
         * word_to_id：単語から単語IDへのディクショナリ
         * id_to_word：単語IDから単語へのディクショナリ
-        * word_matrix：単語ベクトルをまとめた行列で各行に対応する単語のベクトルが格納
+        * word_matrix：単語ベクトルをまとめた行列で各行に対応する単語のベクトルが格納(共起行列)
         * top：取得する類似度のランキング
 * 実装は以下の通り。
     ```python
@@ -325,12 +325,66 @@
 
         # calculate cosine similarity
         vocab_size = len(id_to_word)
+        similarity = np.zeros(vocab_size)
+        for i in range(vocab_size):
+            similarity[i] = cos_similarity(word_matrix[i], query_vec)
+        
+        # Output the value of cosine similarity in descending order 
+        count = 0
+        for i in (-1 * similarity).argsort():
+            if id_to_word[i] == query:
+                continue
+            print('%s: %s' % (id_to_word[i], similarity[i]))
 
+            count +=1
+            if count >= top:
+                return
     ```
-* a
-* ★★～P.74★★
+* まずはじめに渡されてきたqueryがword_to_idのキーに存在するかをチェックする
+* 存在する場合は処理をそのqueryを表示し、処理を続行する。
+* word_to_idからqueryをキーにその単語のIDを取得する。取得した単語IDを使い、word_matrixからその単語の単語ベクトルを取得し、query_vecに保持する。
+* 次にコサイン類似度similarityを計算する。まず、id_to_wordの大きさ分のベクトルを要素0で初期化する。
+* cos_similarity()にword_matrixの各行とquery_vecを渡し、コサイン類似度を計算し、各行の値をベクトルsimilarityの要素として保持する。
+* 最後にコサイン類似度をその値が高い順に表示するためにargsort()関数を使用する。
+* argsort()はNumpy配列の要素を小さい順にソートし、ソート後のインデックスを返す関数である。
+    ```python
+    >>> x = np.array([100, -20, 2])
+    >>> x.argsort()
+    # array([1, 2, 0])
+    ```
+* よって、similarityの各要素に-1をかけ、argsort()関数を適用すると、その返り値は値の大きい要素順のインデックスが変えることになる。
+* これによって、for文を回し、id_to_word, similarityを表示する。
+* このfor文をtopで渡された回数分回すことで、
+* コサイン類似度が高い順にその値と単語を表示することができる。
+* 次にこのmost_similar()関数を使用する例は以下の通り。例ではクエリとして'you'を指定する。
+    ```python
+    import sys
+    sys.path.append('..')
+    from common.util import preprocess, create_co_matrix, most_similar
+
+    text = 'You say goodbye and I say hello.'
+    corpus, word_to_id, id_to_word = preprocess(text)
+    vocab_size = len(word_to_id)
+    C = create_co_matrix(corpus, vocab_size)
+
+    most_similar('you', word_to_id, id_to_word, C, top=5)
+    ```
+* これを実行すると以下のような結果が得られる。
+* この結果から'you'に近い単語は3つあり、'goodbye', 'i', 'hello'であることがわかる。
+    ```
+    [query] you
+    goodbye: 0.7071067691154799
+    i: 0.7071067691154799
+    hello: 0.7071067691154799
+    say: 0.0
+    and: 0.0
+    ```
+* 'i'は'you'と同じ人称代名詞であるため、コサイン類似度が高いことはよく理解できる。
+* 一方、'goodbye'や'hello'のコサイン類似度が高いには説明がつかないが、これはコーパスのサイズが極端に短いことが原因と考えられる。
 
 
+# カウントベースの手法の改善
+* ★★～P.76★★
 
 
 # Method
@@ -340,7 +394,8 @@
 * P.66：[word_to_id[w] for w in words]　※内包表記
 * P.69：sys.path.append('..')
 * P.72：enumerate(corpus)
-
+* P.75：if query not in word_to_id:
+* P.75：x..argsort()
 
 
 
