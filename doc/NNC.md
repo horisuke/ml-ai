@@ -250,7 +250,36 @@
     * Accuraccy：
         * 作成モデルのAccuracy：(246+246)÷(246+246+4+4) = 492÷500 = 0.984
 * 上記の結果はNNの場合と比べ、より高い精度を得ることができていることが分かる。
-* ★★～P.100★★
+
 
 # Sample Project実行(Iris)
-aa
+* ★
+* Project画面を表示し、"tutorial.basics.01_logistic_regression-trial"を選択。
+* EDIT画面に遷移したら、右上の"Save as"アイコンを選択し、プロジェクトを別名保存する。
+* ここでは、"tutorial.basics.01_logistic_regression-trial2"とする。
+* プロジェクトの別名保存には少し時間がかかるため、Project画面でstatusを確認する。
+* Statusが"Saving"から変わるので、しばらく待つ。
+* Dataset画面を表示すると、既に利用できるデータセットの一覧が確認できる。
+* ここでは、学習データ、評価データとして以下を用いる。
+    * 学習データ：iris_flower_dataset.iris_flower_dataset_training_delo
+    * 評価データ：iris_flower_dataset.iris_flower_dataset_validation_delo
+* データセット名を選択すると、画像の連番と画像ごとの課の情報が表示される。
+    * x_0:Sepal length：がくの長さ
+    * x_1:Sepal width：額の幅
+    * x_2:Petal length：花びらの長さ
+    * x_3:Petal width：花びらの幅
+    * y:label：0～2の数値(アヤメの花の種類に対応)
+        * 0：Setosa
+        * 1：Versicolor
+        * 2：Virginca
+* 生成したプロジェクトのEDIT画面に移動し、DATASETタブを選択する。
+* 画面上部にはTRAINING、VALIDATIONそれぞれで使用されているデータセットが表示されている。
+* このデータセットのリンクを選択し、それぞれ上述のデータセットを設定する。
+* 設定するとデータセットの内容が表示されることを確認する。
+* 次にEDIT画面に移動し、作成済みのネットワークを変更する。
+* ここでは以下のような全結合ニューラルネットワークを作成する。
+    * 入力層：4ノード(x_0～x_3)
+    * 中間層：25ノード, 活性化関数ReLU
+    * 出力層：3ノード, 活性化関数Softmax
+    * 誤差関数：多値分類交差エントロピー
+* ★★～P.103★★
