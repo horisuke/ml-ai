@@ -141,7 +141,7 @@
 
         corpus = np.array([word_to_id[w] for w in words])
 
-    return corpus, word_to_id, id_to_word
+        return corpus, word_to_id, id_to_word
     ```
 * この関数を使用すると、コーパスの前処理は以下のようになる。
     ```python
@@ -766,8 +766,182 @@
 * 入力層から中間層への変換は全結合層によって行われるが、この全結合層の重みW_inは7×3の行列でこの重みが単語の分散表現となる。
 * 重みW_inの各行には各単語の分散表現が格納されていると考え、学習を重ねることでコンテキストから出現する単語をうまく推測できるように各単語の分散表現が更新されていく。
 * また、このようにして得られたベクトルは単語の意味もうまくエンコードされている。
+* ここで中間層のニューロン数は入力層のニューロン数よりも少なくする必要がある。
+* これは中間層には単語を予測するために必要な情報をコンパクトに収める必要があり、またその結果として密なベクトル表現が得られるためである。
+* CBOWモデルの推論処理(スコアを算出する処理)の実装は以下の通り。
+    ```python
+    import sys
+    sys.path.append(..)
+    import numpy as np
+    from common.layers import MatMul
+
+    # Context data sample
+    c0 = np.array([[1, 0, 0, 0, 0, 0, 0]])
+    c1 = np.array([[0, 0, 1, 0, 0, 0, 0]])
+
+    # Initialize wegiht
+    W_in = np.random.randn(7, 3)
+    W_out = np.random.randn(3, 7)
+
+    # Create layer
+    in_layer0 = MatMul(W_in)
+    in_layer1 = MatMul(W_in)
+    out_layer = MatMul(W_out)
+
+    # Forward propagation
+    h0 = in_layer0.forward(c0)
+    h1 = in_layer0.forward(c1)
+    h = 0.5 * (h0+h1)
+    s = out_layer.forward(h)
+
+    print(s)
+    # [[ 0.30916255  0.45060817  -0.77308656  0.22054131  0.15037278
+    #   -0.93659277 -0.59612048]]
+    ```
+* まず重みW_in、W_outをランダム値で初期化し、入力側のMatMulレイヤをコンテキストの数だけ(ここでは2つ)生成し、また出力層側のMatMulレイヤを1つ生成する。
+* ここで、入力側のMatMulレイヤは重みW_inを共有して生成する。
+* る偽にMatMulレイヤのforward()メソッドで中間データを生成し、出力層側のMatMulレイヤのforward()メソッドによって、各単語のスコアを算出する。
+* 上記の通り、CBOWモデルは活性化関数を用いないシンプルな構成になっている。
+* 次にCBOWモデルの学習を行う。
+* まず、CBOWモデルは出力層において各単語のスコアを出力するが、そのスコアに対してSoftmax関数を適用することで、その言語の確率を得ることができる。
+* この確率は前後の単語であるコンテキストが与えられた時にその中央にどの単語が出現するかを表すものとなる。
+* 学習データとして、例えばコンテキストとして「you」、「goodbye」が与えられ、正解ラベルが「say」として与えられる。
+* このとき、十分に学習された重みをもつネットワークがあれば、確率を表すニューロンにおいて、「say」に対応するニューロンの確率が高くなると言える。
+* よって、CBOWモデルの学習は正しい予測ができるように重みを調整することを意味する。
+* それにより、W_in、W_outに単語の出現パターンを捉えたベクトルが学習される。
+* CBOWモデルの学習で得られる単語の分散表現は単語の意味的な点、文法的な点において、人間の直感と合致するケースが多いことがこれまでの研究から分かっている。
+* CBOWモデルの学習ではコーパスにおける単語の出現パターンを学んでいるため、コーパスが異なれば、学習で得られる単語の分散表現も異なるものになる。
+* 例えば、コーパスとして、スポーツのニュース記事だけを使う場合と音楽のニュース記事だけを使う場合では得られる単語の分散表現は大きく異なるものとなる。
+* 上記の推論処理の実装に実装を追加して学習を行うためには、多クラス分類を行うためにSoftmax関数と交差エントロピー誤差を導入する必要がある。
+* 上述の実装で得られるスコアをSoftmax関数で確率に変換し、その確率と正解データから交差エントロピー誤差を求め、それを損失として学習を行う。
+* よって、CBOWモデルに対して、SoftmaxレイヤとCross Entropy Errorレイヤを追加することで学習が可能となるが、ここでは、以前に実装済みのSoftmax with Lossというレイヤを使用して実装する。
+* word2vecで使用されるネットワークには上述の通り、入力側の全結合層の重みW_inと出力側の全結合層の重みW_outがある。
+* W_inは各行が各単語の分散表現となっており、W_outは単語の意味がエンコードされたベクトルが格納されていると考えることができる。
+* さらに出力側の重みW_outは列方向(縦方向の並び)に各単語の分散表現が格納されている。
+* このように入力側・出力側の両方の重みに含まれる単語の分散表現はどちらを利用するべきか？を考える。
+* 入力側だけ使用する、出力側だけ使用する、両方使用する、などが考えられる。
+* また、両方使用する場合は、どのように2つを組み合わせるかでさらにいくつかの手法が考えられる。
+* word2vecに関しては、入力側の重みだけを使用するのが最も用いられている方法である。
+* いくつかの研究でW_inのみを使用することの有効性が示されている。
+* 学習で用いる学習データはこれまでと同様、「You say goodbye and I say hello.」をコーパスとして使用する。
+* word2vecで用いるニューラルネットワークの入力はコンテキストであり、正解データはコンテキストで囲まれた中央の単語(ターゲット)である。
+* つまり、学習の目標はニューラルネットワークにコンテキストを入力したときにターゲットの単語が出現する確率を高くすることである。
+* 上記を踏まえ、コーパスからコンテキストとターゲットを作ることを考える。
+* 以下では両端の単語を除くコーパス中の全ての単語をターゲットとし、そのコンテキストを抜き出している。
+    | contexts     | target  |
+    |:-------------|:--------|
+    | you, goodbye | say     |
+    | say, and     | goodbye |
+    | goodbye, I   | and     |
+    | and, say     | I       |
+    | I, hello     | say     |
+    | say, .       | hello   |
+* 上記のcontextsの各行がニューラルネットワークの入力となり、targetの各行が正解データとなる。
+* まず学習を行う準備として、コーパスからコンテキストとターゲットを作成する関数を作成する。
+* はじめにpreprocess()を用い、以下のようにコーパスのテキストを単語IDに変換する。
+    ```python
+    import sys
+    sys.path.append('..')
+    from common.util import preprocess
+
+    test = 'You say goodbye and I say hello.'
+    corpus, word_to_id, id_to_word = preprocess(text)
+    print(corpus)
+    # [0  1  2  3  4  5  6]
+
+    print(id_to_word)
+    # {0:'you', 1:'say', 2:'goodbye', 3:'and', 4:'i', 5:'hello', 6:'.'}
+    ```
+* 次にこの単語IDの配列から上記で行ったのと同様、contextsとtargetを抜き出すことを単語IDベースで行い、それぞれを単語IDのリストとして格納する。
+    | contexts  | target  |
+    |:----------|:--------|
+    | [[0  2]   | [1      |
+    |  [1  3]   |  2      |
+    |  [2  4]   |  3      |
+    |  [3  1]   |  4      |
+    |  [4  5]   |  1      |
+    |  [1  6]]  |  5]     |
+* これにより、コンテキストは6×2の2次元配列(次元はコンテキストの大きさ)、ターゲットは6個の要素を持つ1次元の配列となる。
+* 以上を踏まえ、コーパスからコンテキストとターゲットを作成する関数create_contexts_target()を実装すると以下のようになる。
+    ```python
+    def create_contexts_target(corpus, window_size=1):
+        target = corpus[window_size:-window_size]　#corpus[1:-1]
+        contexts = []
+
+        for idx in range(window_size, len(corpus)-window_size):
+            cs = []
+            for t in range(-window_size, window_size+1):　# -1, 0, 1
+                if t == 0:
+                    continue
+                cs.append(corpus[idx+t])
+            contexts.append(cs)
+        
+        return np.array(contexts), np.array(target)
+    ```
+* まず、targetをcorpusの両端の単語以外をリストとして持つため、corpus[window_size:-window_size]として格納する。
+* 次にfor文を入れ子で回す。外のfor文でcorpusを両端の単語を除く先頭から回し、内のfor文でtargetとその前後のコンテキストを回し、target以外の要素を取得する処理を行う。
+* 関数としては、返り値をcontextsとtargetをそれぞれNumpyの多次元配列として返している。
+* この関数を使う実装は以下のようになる。
+    ```python
+    contexts, target = create_contexts_target(corpus, window_size=1)
+
+    print(contexts)
+    # [[0  2]
+    #  [1  3]
+    #  [2  4]
+    #  [3  1]
+    #  [4  5]
+    #  [1  6]]
+
+    print(target)
+    # [1  2  3  4  1  5]
+    ```
+* 上記により、単語IDのコーパスからコンテキストとターゲットを生成することができた。
+* 次にこれらをCBOWモデルに渡すために単語IDで構成されているコンテキストとターゲットをone-hot表現に変換する。
+    | contexts            | target            |
+    |:--------------------|:------------------|
+    | [[[1 0 0 0 0 0 0]   | [[0 1 0 0 0 0 0]  |  
+    |   [0 0 1 0 0 0 0]]  |                   |
+    |  [[0 1 0 0 0 0 0]   |  [0 0 1 0 0 0 0]  |
+    |   [0 0 0 1 0 0 0]]  |                   |
+    |  [[0 0 1 0 0 0 0]   |  [0 0 0 1 0 0 0]  |
+    |   [0 0 0 0 1 0 0]   |                   |
+    |  [[0 0 0 1 0 0 0]   |  [0 0 0 0 1 0 0]  |
+    |   [0 1 0 0 0 0 0]]  |                   |
+    |  [[0 0 0 0 1 0 0]   |  [0 1 0 0 0 0 0]  |
+    |   [0 0 0 0 0 1 0]]  |                   |
+    |  [[0 1 0 0 0 0 0]   |  [0 0 0 0 0 1 0]] |
+    |   [0 0 0 0 0 0 1]]] |                   |
+* これにより、コンテキストは6×2×7の3次元配列、ターゲットは6×7の2次元配列となる。
+* このone-hot表現への変換のconvert_one_hot()関数を用いて以下のような実装となる。
+    ```python
+    import sys
+    sys.path.append('..')
+    from common.util import preprocess, create_contexts_target, convert_one_hot
+
+    test = 'You say goodbye and I say hello.'
+    corpus, word_to_id, id_to_word = preprocess(text)
+
+    contexts, target = create_contexts_target(corpus, window_size=1)
+
+    vocab_size = len(word_to_id)
+    target = convert_one_hot(target, vocab_size)
+    contexts = convert_one_hot(contexts, vocab_size)
+    ```
+* ここまででCBOWモデルの学習のための準備が完了し、以下では学習に関する実装を行う。
+* 実装するクラスはSimpleCBOWとしての実装は以下の通りとなる。
+    ```python
+    import sys
+    sys.path.append('..')
+    import numpy as np
+    from common.layers import MatMul, SoftmaxWithLoss
+
+    class SimpleCBOW:
+        def __init__(self, vocab_size, hidden_size):
+            V, H = vocab_size, hidden_size
+    ```
 * a
-* ★★～P.103★★
+* ★★～P.115★★
 
 
 # Method
@@ -785,6 +959,7 @@
 * P.85：plt.scatter(U[:,0], U[:,1], alpha=0.5)
 * P.99：np.random.randn(7, 3)
 * P.99：np.dot(c, W)
+* P.113：range(start, stop)　※start～stop-1までの整数を生成
 
 
 
