@@ -304,44 +304,44 @@
 * EDITタブに戻り、右側のRunボタンを選択することで学習を実行すると、TRAINING画面に遷移し、学習が始まる。
 * 以下のようなログが出力され、学習が終了する。
     ```
-    2019-03-22 04:53:14,858 [worker]: [INFO]: download: 13679/configurations/45835/data.sdcproj to work/data.sdcproj
-    2019-03-22 04:53:15,421 [worker]: [INFO]: sdeep_console_cli_util create_prototxt -i "/home/nnabla/work/data.sdcproj" -o "/home/nnabla/work/network.prototxt" -p "/home/nnabla/work/param_assign.csv"
-    2019-03-22 04:53:15,512 [worker]: [INFO]: sdeep_console_cli_util create_result_ini -i "/home/nnabla/work/data.sdcproj" -y "/home/nnabla/empty_monitoring_report.yml" -o "/home/nnabla/work/result.ini"
-    2019-03-22 04:53:15,614 [worker]: [INFO]: nnabla_cli train -c /home/nnabla/work/network.prototxt -o /home/nnabla/results -s /home/nnabla/work/data.sdcproj -a /home/nnabla/work/param_assign.csv
-    2019-03-22 04:53:16,635 [nnabla]: Train with contexts ['cpu']
-    2019-03-22 04:53:16,657 [nnabla]: Training epoch 1 of 100 begin
-    2019-03-22 04:53:16,688 [nnabla]: epoch 1 of 100 cost=0.195891  {train_error=0.138801, valid_error=0.204744} time=(0.0s /1.4s)
-    2019-03-22 04:53:16,706 [nnabla]: epoch 2 of 100 cost=0.144414  {train_error=0.107520, valid_error=0.078900} time=(0.0s /2.0s)
-    2019-03-22 04:53:16,721 [nnabla]: epoch 3 of 100 cost=0.088420  {train_error=0.099086, valid_error=0.134698} time=(0.1s /1.9s)
-    2019-03-22 04:53:16,739 [nnabla]: epoch 4 of 100 cost=0.086810  {train_error=0.072241, valid_error=0.051703} time=(0.1s /1.8s)
-    2019-03-22 04:53:16,755 [nnabla]: epoch 5 of 100 cost=0.068875  {train_error=0.064334, valid_error=0.089906} time=(0.1s /1.8s)
-    2019-03-22 04:53:16,763 [nnabla]: epoch 6 of 100 cost=0.055505  time=(0.1s /1.8s)
-    2019-03-22 04:53:16,771 [nnabla]: epoch 7 of 100 cost=0.043416  time=(0.1s /1.6s)
-    2019-03-22 04:53:16,780 [nnabla]: epoch 8 of 100 cost=0.041503  time=(0.1s /1.5s)
-    2019-03-22 04:53:16,788 [nnabla]: epoch 9 of 100 cost=0.033646  time=(0.1s /1.5s)
-    2019-03-22 04:53:16,807 [nnabla]: epoch 10 of 100 cost=0.029419  {train_error=0.027932, valid_error=0.020627} time=(0.1s /1.4s)
-    2019-03-22 04:53:16,815 [nnabla]: epoch 11 of 100 cost=0.025412  time=(0.2s /1.4s)
-    2019-03-22 04:53:16,826 [nnabla]: epoch 12 of 100 cost=0.024410  time=(0.2s /1.4s)
+    2019-03-22 14:25:21,317 [worker]: [INFO]: download: 13954/configurations/45896/data.sdcproj to work/data.sdcproj
+    2019-03-22 14:25:21,855 [worker]: [INFO]: sdeep_console_cli_util create_prototxt -i "/home/nnabla/work/data.sdcproj" -o "/home/nnabla/work/network.prototxt" -p "/home/nnabla/work/param_assign.csv"
+    2019-03-22 14:25:21,941 [worker]: [INFO]: sdeep_console_cli_util create_result_ini -i "/home/nnabla/work/data.sdcproj" -y "/home/nnabla/empty_monitoring_report.yml" -o "/home/nnabla/work/result.ini"
+    2019-03-22 14:25:22,038 [worker]: [INFO]: nnabla_cli train -c /home/nnabla/work/network.prototxt -o /home/nnabla/results -s /home/nnabla/work/data.sdcproj -a /home/nnabla/work/param_assign.csv
+    2019-03-22 14:25:22,879 [nnabla]: Train with contexts ['cpu']
+    2019-03-22 14:25:22,898 [nnabla]: Training epoch 1 of 100 begin
+    2019-03-22 14:25:22,926 [nnabla]: epoch 1 of 100 cost=1.533403  {train_error=1.187518, valid_error=1.617892} time=(0.0s /1.2s)
+    2019-03-22 14:25:22,944 [nnabla]: epoch 2 of 100 cost=1.271012  {train_error=1.061799, valid_error=0.801447} time=(0.0s /1.8s)
+    2019-03-22 14:25:22,959 [nnabla]: epoch 3 of 100 cost=0.963418  {train_error=1.091719, valid_error=1.292670} time=(0.1s /1.8s)
+    2019-03-22 14:25:22,974 [nnabla]: epoch 4 of 100 cost=1.048303  {train_error=0.996113, valid_error=0.850306} time=(0.1s /1.7s)
+    2019-03-22 14:25:22,991 [nnabla]: epoch 5 of 100 cost=1.005608  {train_error=1.010743, valid_error=1.084535} time=(0.1s /1.7s)
+    2019-03-22 14:25:22,999 [nnabla]: epoch 6 of 100 cost=0.982661  time=(0.1s /1.7s)
+    2019-03-22 14:25:23,007 [nnabla]: epoch 7 of 100 cost=0.947425  time=(0.1s /1.6s)
+    2019-03-22 14:25:23,016 [nnabla]: epoch 8 of 100 cost=0.949962  time=(0.1s /1.5s)
+    2019-03-22 14:25:23,024 [nnabla]: epoch 9 of 100 cost=0.923598  time=(0.1s /1.4s)
+    2019-03-22 14:25:23,045 [nnabla]: epoch 10 of 100 cost=0.898164  {train_error=0.903846, valid_error=0.788982} time=(0.1s /1.3s)
+    2019-03-22 14:25:23,053 [nnabla]: epoch 11 of 100 cost=0.894671  time=(0.2s /1.4s)
+    2019-03-22 14:25:23,064 [nnabla]: epoch 12 of 100 cost=0.881112  time=(0.2s /1.4s)
     ・・・
-    2019-03-22 04:53:17,582 [nnabla]: epoch 88 of 100 cost=0.001000  time=(0.9s /1.0s)
-    2019-03-22 04:53:17,593 [nnabla]: epoch 89 of 100 cost=0.001004  time=(0.9s /1.0s)
-    2019-03-22 04:53:17,610 [nnabla]: epoch 90 of 100 cost=0.000973  {train_error=0.000922, valid_error=0.001494} time=(0.9s /1.0s)
-    2019-03-22 04:53:17,619 [nnabla]: epoch 91 of 100 cost=0.000915  time=(1.0s /1.1s)
-    2019-03-22 04:53:17,628 [nnabla]: epoch 92 of 100 cost=0.000940  time=(1.0s /1.1s)
-    2019-03-22 04:53:17,637 [nnabla]: epoch 93 of 100 cost=0.000904  time=(1.0s /1.1s)
-    2019-03-22 04:53:17,646 [nnabla]: epoch 94 of 100 cost=0.000872  time=(1.0s /1.1s)
-    2019-03-22 04:53:17,655 [nnabla]: epoch 95 of 100 cost=0.000858  time=(1.0s /1.0s)
-    2019-03-22 04:53:17,664 [nnabla]: epoch 96 of 100 cost=0.000911  time=(1.0s /1.0s)
-    2019-03-22 04:53:17,674 [nnabla]: epoch 97 of 100 cost=0.000922  time=(1.0s /1.0s)
-    2019-03-22 04:53:17,683 [nnabla]: epoch 98 of 100 cost=0.000703  time=(1.0s /1.0s)
-    2019-03-22 04:53:17,692 [nnabla]: epoch 99 of 100 cost=0.000874  time=(1.0s /1.0s)
-    2019-03-22 04:53:17,713 [nnabla]: epoch 100 of 100 cost=0.000718  {train_error=0.000809, valid_error=0.000594} time=(1.0s /1.0s)
-    2019-03-22 04:53:17,713 [nnabla]: Training Completed.
+    2019-03-22 14:25:23,778 [nnabla]: epoch 88 of 100 cost=0.357768  time=(0.9s /1.0s)
+    2019-03-22 14:25:23,789 [nnabla]: epoch 89 of 100 cost=0.317276  time=(0.9s /1.0s)
+    2019-03-22 14:25:23,806 [nnabla]: epoch 90 of 100 cost=0.322348  {train_error=0.319766, valid_error=0.220777} time=(0.9s /1.0s)
+    2019-03-22 14:25:23,815 [nnabla]: epoch 91 of 100 cost=0.315129  time=(0.9s /1.0s)
+    2019-03-22 14:25:23,824 [nnabla]: epoch 92 of 100 cost=0.307717  time=(0.9s /1.0s)
+    2019-03-22 14:25:23,832 [nnabla]: epoch 93 of 100 cost=0.334560  time=(0.9s /1.0s)
+    2019-03-22 14:25:23,841 [nnabla]: epoch 94 of 100 cost=0.280173  time=(0.9s /1.0s)
+    2019-03-22 14:25:23,850 [nnabla]: epoch 95 of 100 cost=0.291028  time=(1.0s /1.0s)
+    2019-03-22 14:25:23,858 [nnabla]: epoch 96 of 100 cost=0.329578  time=(1.0s /1.0s)
+    2019-03-22 14:25:23,867 [nnabla]: epoch 97 of 100 cost=0.295773  time=(1.0s /1.0s)
+    2019-03-22 14:25:23,876 [nnabla]: epoch 98 of 100 cost=0.303806  time=(1.0s /1.0s)
+    2019-03-22 14:25:23,885 [nnabla]: epoch 99 of 100 cost=0.303895  time=(1.0s /1.0s)
+    2019-03-22 14:25:23,903 [nnabla]: epoch 100 of 100 cost=0.294800  {train_error=0.294852, valid_error=0.343269} time=(1.0s /1.0s)
+    2019-03-22 14:25:23,903 [nnabla]: Training Completed.
     NNabla command line interface (Version 1.0.5.console_day3-fix-181220, Build 181219104847)
-    2019-03-22 04:53:19,636 [worker]: [INFO]: create result_train.nnp
-    2019-03-22 04:53:20,767 [worker]: [INFO]: create result.nnb
-    2019-03-22 04:53:23,873 [worker]: [INFO]: create result.onnx
-    2019-03-22 04:53:26,138 [worker]: [INFO]: worker done
+    2019-03-22 14:25:25,755 [worker]: [INFO]: create result_train.nnp
+    2019-03-22 14:25:26,775 [worker]: [INFO]: create result.nnb
+    2019-03-22 14:25:29,775 [worker]: [INFO]: create result.onnx
+    2019-03-22 14:25:31,967 [worker]: [INFO]: worker done
     ```
 * またこれまでと同様、学習カーブとして、以下のグラフが表示される。
     * cost
@@ -352,30 +352,30 @@
 * EVALUATION画面に遷移し、モデルの評価が始まる。
 * 以下のようなログが出力され、評価が終了する。
     ```
-    2019-03-22 05:00:30,020 [worker]: [INFO]: download: 13679/configurations/45835/data.sdcproj to work/data.sdcproj
-    2019-03-22 05:00:30,593 [worker]: [INFO]: Find learned parameter file: results_current_100.nnp
-    2019-03-22 05:00:31,706 [worker]: [INFO]: download: 13679/results/45835/result.nnp to results/result.nnp
-    2019-03-22 05:00:32,374 [worker]: [INFO]: download: 13679/results/45835/results_best_100.nnp to results/results_best_100.nnp
-    2019-03-22 05:00:33,037 [worker]: [INFO]: download: 13679/results/45835/results_current_100.nnp to results/results_current_100.nnp
-    2019-03-22 05:00:33,042 [worker]: [INFO]: Use config file: 13679/results/45835/results_current_100.nnp, instead of config file: 13679/configurations/45835/data.sdcproj
-    2019-03-22 05:00:33,078 [worker]: [INFO]: nnabla_cli forward -c /home/nnabla/results/results_current_100.nnp -d /dataset-cache/ccbf15a0-bcb6-4ba6-b10e-27fc877c4348/8.cache -o /home/nnabla/results
-    2019-03-22 05:00:34,457 [nnabla]: data 16 / 30
-    2019-03-22 05:00:34,459 [nnabla]: data 30 / 30
-    2019-03-22 05:00:34,462 [nnabla]: Add output_result.zip to result.nnp.
-    2019-03-22 05:00:34,462 [nnabla]: Add output_result.zip to results_best_100.nnp.
-    2019-03-22 05:00:34,463 [nnabla]: Add output_result.zip to results_current_100.nnp.
-    2019-03-22 05:00:34,463 [nnabla]: Forward Completed.
+    2019-03-22 14:26:50,821 [worker]: [INFO]: download: 13954/configurations/45896/data.sdcproj to work/data.sdcproj
+    2019-03-22 14:26:51,368 [worker]: [INFO]: Find learned parameter file: results_current_100.nnp
+    2019-03-22 14:26:52,460 [worker]: [INFO]: download: 13954/results/45896/result.nnp to results/result.nnp
+    2019-03-22 14:26:53,035 [worker]: [INFO]: download: 13954/results/45896/results_best_90.nnp to results/results_best_90.nnp
+    2019-03-22 14:26:53,615 [worker]: [INFO]: download: 13954/results/45896/results_current_100.nnp to results/results_current_100.nnp
+    2019-03-22 14:26:53,619 [worker]: [INFO]: Use config file: 13954/results/45896/results_current_100.nnp, instead of config file: 13954/configurations/45896/data.sdcproj
+    2019-03-22 14:26:53,652 [worker]: [INFO]: nnabla_cli forward -c /home/nnabla/results/results_current_100.nnp -d /dataset-cache/ccbf15a0-bcb6-4ba6-b10e-27fc877c4348/8.cache -o /home/nnabla/results
+    2019-03-22 14:26:54,554 [nnabla]: data 16 / 30
+    2019-03-22 14:26:54,555 [nnabla]: data 30 / 30
+    2019-03-22 14:26:54,558 [nnabla]: Add output_result.zip to result.nnp.
+    2019-03-22 14:26:54,558 [nnabla]: Add output_result.zip to results_best_90.nnp.
+    2019-03-22 14:26:54,558 [nnabla]: Add output_result.zip to results_current_100.nnp.
+    2019-03-22 14:26:54,559 [nnabla]: Forward Completed.
     NNabla command line interface (Version 1.0.5.console_day3-fix-181220, Build 181219104847)
-    2019-03-22 05:00:35,131 [worker]: [INFO]: upload: results/output_result.csv to 13679/results/45835/output_result.csv
-    2019-03-22 05:00:35,135 [worker]: [INFO]: create confusion_matrix.json
-    2019-03-22 05:00:35,190 [worker]: [INFO]: confusion_matrix.json created
-    2019-03-22 05:00:35,743 [worker]: [INFO]: upload: work/confusion_matrix.json to 13679/results/45835/confusion_matrix.json
-    2019-03-22 05:00:36,301 [worker]: [INFO]: upload: results/result.nnp to 13679/results/45835/result.nnp
-    2019-03-22 05:00:36,837 [worker]: [INFO]: upload: results/results_best_100.nnp to 13679/results/45835/results_best_100.nnp
-    2019-03-22 05:00:37,408 [worker]: [INFO]: upload: results/results_current_100.nnp to 13679/results/45835/results_current_100.nnp
-    2019-03-22 05:00:37,413 [worker]: [INFO]: create result_evaluate.nnp
-    2019-03-22 05:00:41,996 [worker]: [INFO]: Completed to pageing file creator.
-    2019-03-22 05:00:42,000 [worker]: [INFO]: worker done
+    2019-03-22 14:26:55,241 [worker]: [INFO]: upload: results/output_result.csv to 13954/results/45896/output_result.csv
+    2019-03-22 14:26:55,246 [worker]: [INFO]: create confusion_matrix.json
+    2019-03-22 14:26:55,296 [worker]: [INFO]: confusion_matrix.json created
+    2019-03-22 14:26:55,791 [worker]: [INFO]: upload: work/confusion_matrix.json to 13954/results/45896/confusion_matrix.json
+    2019-03-22 14:26:56,337 [worker]: [INFO]: upload: results/result.nnp to 13954/results/45896/result.nnp
+    2019-03-22 14:26:56,860 [worker]: [INFO]: upload: results/results_best_90.nnp to 13954/results/45896/results_best_90.nnp
+    2019-03-22 14:26:57,380 [worker]: [INFO]: upload: results/results_current_100.nnp to 13954/results/45896/results_current_100.nnp
+    2019-03-22 14:26:57,384 [worker]: [INFO]: create result_evaluate.nnp
+    2019-03-22 14:27:01,515 [worker]: [INFO]: Completed to pageing file creator.
+    2019-03-22 14:27:01,520 [worker]: [INFO]: worker done
     ```
 * これまでと同様、評価結果として以下を選択して表示することができる。
     * Output Result
