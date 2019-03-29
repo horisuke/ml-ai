@@ -919,7 +919,7 @@
     sys.path.append('..')
     from common.util import preprocess, create_contexts_target, convert_one_hot
 
-    test = 'You say goodbye and I say hello.'
+    text = 'You say goodbye and I say hello.'
     corpus, word_to_id, id_to_word = preprocess(text)
 
     contexts, target = create_contexts_target(corpus, window_size=1)
@@ -939,9 +939,196 @@
     class SimpleCBOW:
         def __init__(self, vocab_size, hidden_size):
             V, H = vocab_size, hidden_size
+
+            # Initialize weight
+            W_in = 0.01 * np.random.randn(V, H).astype('f')
+            W_out = 0.01 * np.random.randn(H, V).astype('f')
+
+            # Create layers
+            self.in_layer0 = MatMul(W_in)
+            self.in_layer1 = MatMul(W_in)
+            self.out_layer = MatMul(W_out)
+            self.loss_layer = SoftmaxWithLoss()
+
+            # Create lists of all weight and gradient
+            layers = [self.in_layer0, self.in_layer1, self.out_layer]
+            self.params, self.grads = [], []
+            for layer in layers:
+                self.params += layer.params
+                self.grads += layer.grads
+            
+            # Set the distributed expression of words to member variables.
+            self.word_vecs = W_in
     ```
-* a
-* ★★～P.115★★
+* まずコンストラクタは上記のような実装となる。
+* 引数として語彙数vocab_sizeと中間層のニューロンの数hidden_sizeを受け取る。
+* 重みの初期値として、W_in、W_outを生成し、NumPy配列のデータ型astype('f')とし、要素を32ビットの浮動小数点数とする。
+* 次に入力側のMatMulレイヤを2つ、出力側のMatMulレイヤを1つ、Softmax with Lossレイヤを1つそれぞれ作成する。
+* 入力側のMatMulレイヤ数はコンテキストで使用する単語数と同じ分だけ生成する(ここでは2つ)
+* 次にニューラルネットワークで使われるパラメータと勾配をメンバー変数params, gradsにリストとして格納する。
+* また、W_in(単語の分散表現)もメンバーword_vecsに格納する。
+* 上記の実装だと同じ重みを複数のレイヤで共有していることになるため、メンバー変数paramsのリストには、同じ重みが複数存在することになる。
+* これにより、AdamやMomentumなどのoptimize処理が正しく動作しなくなる可能性がある。
+* よって、Trainerクラス内部でパラメータの更新時にパラメータの重複を取り除く処理を行っている。
+* 次にニューラルネットワークの順伝播処理を行うメソッドforward()を実装すると以下の通りとなる。
+    ```python
+        def forward(self, contexts, target):
+            h0 = self.in_layer0.forward(contexts[:, 0])
+            h1 = self.in_layer1.forward(contexts[:, 1])
+            h = (h0 + h1) * 0.5
+            score = self.out_layer.forward(h)
+            loss = self.loss_layer.forward(score, target)
+            return loss
+    ```
+* forward()メソッドは引数として、contextsとtargetの2つを取り、損失(loss)を返す。
+* contextsはここでは3次元のNumPy配列となり、(6,2,7)=(コンテキストペアの数,コンテキストサイズ,語彙数)となる。
+* また、targetはここでは2次元NumPy配列となり、(6,7)=(コンテキストペアの数,語彙数)となる。
+* 次にニューラルネットワークの逆伝播処理を行うメソッドbackward()を実装すると以下の通りとなる。
+    ```python
+        def backward(self, dout=1):
+            ds = self.loss_layer.backward(dout)
+            da = self.out_layer.backward(ds)
+            da *= 0.5
+            self.in_layer1.backward(da)
+            self.in_layer0.backward(da)
+            return None
+    ```
+* 各パラメータの勾配をメンバー変数gradsにまとめ、順伝播・逆伝播の実装を行なったため、forward()メソッドを呼び、次にbackward()メソッドを呼ぶことでgradsに保持されている勾配が更新することができる。
+* 以下では、SimpleCBOWクラスの学習の実装を行う。
+* CBOWモデルの学習も通常のニューラルネットワークの学習と全く同じで、まず学習データを準備してニューラルネットワークに与え、勾配を算出し、重みを逐一アップデートしていく処理を行う。
+    ```python
+    import sys
+    sys.path.append('..')
+    from common.trainer import Trainer
+    from common.optimizer import Adam
+    from simple_cbow import SimpleCBOW
+    from common.util import preprocess, create_contexts_target, convert_one_hot
+
+    window_size = 1
+    hidden_size = 5
+    batch_size = 3
+    max_epoch = 1000
+
+    text = 'You say goodbye and I say hello.'
+    corpus, word_to_id, id_to_word = preprocess(text)
+
+    vocab_size = len(word_to_id)
+    contexts, target = create_contexts_target(corpus, window_size=1)
+    target = convert_one_hot(target, vocab_size)
+    contexts = convert_one_hot(contexts, vocab_size)
+
+    model = SimpleCBOW(vocal_size, hidden_size)
+    optimizer = Adam()
+    trainer = Trainer(model, optimizer)
+
+    trainer.fit(contexts, target, max_epoch, batch_size)
+    trainer.plot()
+    ```
+* パラメータを更新するoptimizerには様々な手法があるが、ここではAdamを使用する。
+* Trainerクラスではニューラルネットワークの学習を行なう。
+* 具体的には学習データからミニバッチを生成し、それをニューラルネットワークに与えて勾配を算出、その勾配をoptimizerに渡してパラメータを更新する処理を行う。
+* このような一連の処理をTrainerクラスに集約することで学習のためのコードをシンプルにすることができる。
+* 最後のplot()メソッドで実行結果をグラフで確認する。
+* 縦軸を損失、横軸をiterationとしてグラフを表示すると、学習を重ねるごとに損失が減少していくことがわかる。
+* ここで、学習が終わった後の重みパラメータを確認する。
+* 入力側のMatMulレイヤの重みを以下のコードで取り出す。
+    ```python
+    word_vecs = model.word_vecs
+    for word_id, word in id_to_word.items():
+        print(word, word_vecs[word_id])
+    ```
+* 入力側のMatMulレイヤの重みはSimpleCBOWのメンバー変数word_vecsに格納されているので、これを取得し、for文で単語とその単語のベクトル表現を取得する。
+* 実行結果は以下のようになる。
+    ```
+    you [-0.9031807  -1.0374491  -1.4682057  -1.3216232  0.93127245]
+    say [ 1.2172916   1.2620505  -0.07845993  0.07709391 -1.2389531]
+    goodbye [-1.0834033  -0.8826921  -0.33428606  -0.5720131  1.0488235]
+    and [ 1.0244362  1.0160093  -1.6284224  -1.6400533  -1.0564581]
+    i [ -1.0642933  -0.9162385  -0.31357735 -0.5730831  1.041875]
+    hello [-0.9018145  -1.035476  -1.4629668  -1.3058501  0.9280102]
+    . [ 1.0985303  1.1642815  1.4365371  1.3974973  -1.0714306]
+    ```
+* これにより、コーパスに含まれる単語の密なベクトル表現を得ることができたと言える。
+* ただ、これらは'You say goodbye and I say hello.'という小さなコーパスから得られた結果に過ぎない。
+* より大きく実用的なコーパスを使用することで、よりよい単語の分散表現を得ることができる。
+* その場合、これまでのやり方だと処理速度の点で問題が発生する。これまでの手法には処理効率の点でいくつかの問題があるためである。
+* 以降ではこれまでのシンプルなCBOWモデルに対して改良を加え、実用的なCBOWモデルを実装していく。
+* まず、CBOWモデルを「確率」という視点から見てみる。
+* 「確率」はP(・)と表され、Aという事象が起こる確率はP(A)と表記される。
+* また、「AとBが同時に起こる確率」つまり同時確率はP(A,B)と表記し、「Bが起こった後にAが起こる確率」つまり事後確率はP(A|B)と表記される。事後確率は「Bという情報が与えられたときにAが起こる確率」と解釈することもできる。
+* これらを踏まえ、CBOWモデルを確率の表記で記述することを考える。
+* CBOWモデルはコンテキストを与えると、ターゲットとなる単語の確率を出力するという処理を行うので、ここでは、w1, w2,...wTという単語列のコーパスとウィンドウサイズが1のコンテキストを考える。
+* ここで、コーパス中のt番目の単語をwtをすると、コーパスは以下のように表される。
+    ```
+    w1  w2  w3 ...  wt-1  wt  wt+1  ...  wT-1  wT
+    ```
+* このとき、「コンテキストとしてwt-1とwt+1が与えられたとき(=B)」に「ターゲットがwtになる(=A)」確率は事後確率を用いて以下のようになる。
+    * P(wt | wt-1,wt+1)　　(3.1)
+* これはつまり、CBOWは(3.1)をモデル化していることを意味する。
+* また、(3.1)を用いることで、CBOWモデルの損失関数も簡潔に表すことができる。
+* まず、交差エントロピー誤差は以下のように表すことができる。
+    * L = - Σ tk・logyk　　(1.7)
+        * yk：k番目に対応する事象が起こる確率
+        * tk：教師ラベル(one-hotベクトル)
+* このエントロピー誤差に「ターゲットがwtになる確率」をあてはめると、tkのt番目の要素のみが1、それ以外の要素は0となり、yt = P(wt | wt-1,wt+1)とすることができる。
+* これを考慮すると、(3.1)、(1.7)から以下のようになる。
+    * L = -logP(wt | wt-1,wt+1)　　(3.2)
+* 上記より、CBOWモデルの損失関数は(3.1)の確率に対してlogを取り、その値にマイナスをつけたものであると言える。これは負の対数尤度(negative log likelihood)と呼ぶ。
+* (3.2)は1つのサンプルデータに関する損失関数となるが、これをコーパス全体に拡張すると損失関数は以下のようになる。
+    * L = -(1/T)・ΣlogP(wt | wt-1,wt+1)　　※t = 1, 2, ..., T　　(3.3)
+* これを踏まえると、CBOWモデルの学習とはこの(3.3)で表される損失関数を小さくすることであり、重みパラメータが単語の分散表現となる。
+* word2vecでは、CBOWモデルの他にskip-gramと呼ばれるモデルがある。
+* skip-gramはCBOWで扱うコンテキストとターゲットを逆転させたモデルである。
+* CBOWモデルとskip-gramモデルで解くべき問題を比較すると以下のようになる。
+    * CBOWモデル：　you  ?  goodbye and I say hello.
+    * skip-gramモデル：　?  say  ?  and I say hello.
+* CBOWモデルはコンテキストが複数あり、それらから中央のターゲットの単語を推測するのに対し、skip-gramモデルは中央のターゲットの単語から周囲の複数の単語(コンテキスト)を推測する。
+* よって、skip-gramモデルのレイヤー構成はCBOWモデルのレイヤー構成の逆の構成になる。
+* つまり、skip-gramモデルでは入力層が1つで出力層がコンテキストの数だけ存在するような構成となる。
+* 出力層では個別に損失を求め、それらを合計したものを最終的な損失とする。
+* 次にskip-gramモデルを確率の表記を用いて表すことを考える。
+* ターゲットとなる単語をwt、ターゲットの単語のコンテキストとなる単語をwt-1、wt+1とすると、skip-gramモデルは以下のように表される。
+    * P(wt-1,wt+1 | wt)　　(3.4)
+* これは「ターゲットwtが与えられたときにwt-1、wt+1が同時に起こる確率」を意味する。
+* ここでは、wt-1、wt+1の間に関連性がないと仮定して、以下のように分解した表現として考える。
+    * P(wt-1,wt+1 | wt) = P(wt-1 | wt) P(wt+1 | wt)　　(3.5)
+* さらにCBOWモデルと同様、(1.7)の交差エントロピー誤差の式を適用し、skip-gramモデルの損失関数を導くと以下のようになる。
+    * L = -logP(wt-1,wt+1 | wt) = -logP(wt-1 | wt) P(wt+1 | wt) = -(logP(wt-1 | wt) + logP(wt+1 | wt))　　(3.6)
+    * ※ここでは、logxy = logx + logyの性質を用いて変換している。
+* 上式の通り、skip-gramモデルの損失関数はコンテキスト分の損失をそれぞれ求め、合計したものであると言える。
+* CBOWモデルと同様、損失関数をコーパス全体に拡張すると、以下のようになる。
+    * L = -(1/T)Σ(logP(wt-1 | wt) + logP(wt+1 | wt))　　※t = 1, 2, ..., T　　(3.7)
+* (3.3)、(3.7)を比較することで、CBOWモデルとskip-gramモデルの違いがわかる。
+* skip-gramモデルはコンテキストの数だけ推測するため、損失関数は各コンテキストで求めた損失の総和を求めているのに対し、CBOWモデルは1つのターゲットの損失を求めている。
+* これまでのCBOWモデルとskip-gramモデルでは、skip-gramモデルを使用する方がよい。
+* skip-gramモデルの方が、多くの場合、単語の分散表現の精度がよいこと、またコーパスが大規模になると、低頻出単語や類推問題の性能において、優れた結果が得られる傾向があることが知られているからである。
+* 一方、学習速度の点ではCBOWモデルの方が、skip-gramモデルよりも高速である。
+* これはskip-gramモデルはコンテキストの数だけ損失を求めるため、計算コストが大きくなるためである。
+* skip-gramモデルは1つの単語からその周囲の単語を予測することになるが、直感的にこの問題は難しいと言える。
+* CBOWモデルではコンテキストから1つの単語を予測するので、直感的には比較的簡単な問題と言える。
+* つまり、skip-gramモデルの方がより難しい問題に取り組み、学習しているため、より優れた単語の分散表現を得られると言える。
+* 次のカウントベースの手法と推論ベースの手法(特にword2vec)の手法を比較する。
+* カウントベースの手法はコーパス全体の統計データから1回の学習で単語の分散表現を得ていたが、推論ベースの手法では、コーパスの一部を何度も見ながらミニバッチとして学習し、単語の分散表現を得ている。
+* まず、語彙に新しい単語を追加するケースで単語の分散表現の更新作業が発生する場合を考える。
+* この場合、カウントベースの手法では、ゼロから計算をし直す必要がある。
+* 単語の分散表現を少し修正したい場合であっても、再度、共起行列を作り直し、SVDを行なう一連の作業が必要となる。
+* 一方、推論ベースの手法であるword2vecでは、パラメータの再学習を行うことができる。
+* つまり、これまで学習した重みを初期値として再学習することでこれまでの学習経験を失うことなく、単語の分散表現の更新を効率的に行うことができる。
+* これらを踏まえると、語彙が追加された場合は推論ベースの手法の方がよいと言える。
+* 次にカウントベースの手法と推論ベースの手法それぞれで得られる単語の分散表現の性質や精度を比較する。
+* 分散表現の性質に関しては、カウントベースの手法では主に単語の類似性がエンコードされることがわかっている。
+* word2vecでは単語の類似性に加え、さらに複雑な単語間のパターンも捉えることができることがわかっている。
+    * word2vecで「king - man + woman = queen」のような類推問題を解けることが知られている。
+* ただ単語の類似性に関する定量評価ではカウントベースの手法と推論ベースの手法に関しては、優劣をつけられないことが判明している。
+* これはハイパーパラメータの依存度が大きいためである。
+* また、推論ベースの手法とカウントベースの手法には関連性があることがわかっている。
+* 具体的にはskip-gramモデル、negative samplingを用いたモデルは、カウントベースの手法で生成するコーパス全体の共起行列に対して、特殊な行列分解をしているのと同じであることが示されている。
+* また、word2vec以降、推論ベースとカウントベースの手法を融合させたGloVeという手法も提案されている。
+* この手法では、コーパス全体の統計データの情報を損失関数に取り入れてミニバッチ学習を行っている。
+
+
+# word2vecの高速化
+* ★★～P.130★★
 
 
 # Method
