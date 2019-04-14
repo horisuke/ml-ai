@@ -1379,9 +1379,150 @@
 * コーパス内での単語の使用頻度に基づいて単語をサンプリングするには、まずコーパスから各単語の出現回数を求め、これを確率分布で表す。
 * そしてその確率分布から単語をサンプリングする。
 * 確率分布に従ってサンプリングすることで、コーパス内で多く登場した単語が抽出されやすくなり、逆にレアな単語は抽出されにくくなる。
-* ★★～P.154★★
+* Negative Samplingでは、負例として多くの単語をカバーすることが望まれるが、計算量の問題から負例を少数に限定する必要がある。
+* ここで負例としてレアな単語ばかりが選ばれてしまうと現実的な問題においてもレアな単語はほとんど出現しないため、よい結果が得られないことになる。
+* つまり、レアな単語を相手にする重要度は低く、それよりも高頻出の単語に対応できるのが良い結果に繋がると言える。
+* 以下では確率分布に従ってPythonを使い、単語をサンプリングする。ここでは、Numpyのnp.random.choice()メソッドを使用する。
+   ```python
+   >>> import numpy as np
 
+   # 0～9からrandomに数字をサンプリング
+   >>> np.random.choice(10)
+   7
+   >>> np.random.choice(10)
+   2
 
+   # wordsからrandomに要素をサンプリング
+   >>> words = ['you', 'say', 'goodbye', 'I', 'hello', ',']
+   >>> np.random.choice(words)
+   'goodbye'
+
+   # randomに5つの要素をサンプリング(重複あり)
+   >>> np.random.choice(words, size=5)
+   array(['goodbye', ',', 'hello', 'goodbye', 'say'], dtype='<U7')
+   
+   # randomに5つの要素をサンプリング(重複なし)
+   >>> np.random.choice(words, size=5, replace=False)
+   array(['hello', ',', 'goodbye', 'I', 'you'], dtype='<U7')
+
+   # 確率分布に従ってサンプリング
+   >>> p = [0.5, 0.1, 0.05, 0.2, 0.05, 0.1]
+   >>> np.random.choice(words, p=p)
+   'you'
+   ```
+* np.random.choice()の引数にsizeを指定することで、複数回サンプリングをまとめて行うことができ、また引数replaceにFalseを指定することでそれらのサンプリングを重複なく行なうことができる。
+* また、引数pに確率分布を示すリストを指定することで、その確率分布に従ったサンプリングを行なうことができる。
+* word2vecで提案されているNegative samplingでは以下のようになっている。
+    * P'(wi) = P(wi)^0.75 / ΣP(wj)^0.75　　(4.4)
+        * P(wi)：i番目の単語の確率
+        * ΣP(wj) (j=1,2,...n)：P(w1)^0.75, P(w2)^0.75,...P(wn)^0.75の総和 = 1
+* P'(wi)では通常の確率分布の各要素を0.75乗している。それに伴い、分母として0.75乗した各要素の確率分布の総和が必要となる。これは0.75乗後も確率の総和を１にするためである。
+* 各要素を0.75乗するのは、出現確率の低い単語を見捨てないために行われている。
+* つまり、0.75乗することで確率の低い単語の確率を少しだけ高くしている。
+* 具体的には以下のようになる。
+    ```python
+    >>> p = [0.7, 0.29, 0.01]
+    >>> new_p = np.power(p, 0.75)
+    >>> new_p /= np.sum(new_p)
+    >>> print(new_p)
+    [0.64196878  0.33150408  0.02652714]
+    ```
+* 上記から変換前のある要素の確率が0.01だったものが、変換後は0.026...になっていることがわかる。
+* また、0.75という数値に理論的な意味はなく、別の値を設定することも可能である。
+* これらを踏まえ、コーパスから確率分布を作成後、各要素の確率を0.75乗し、np.random.choice()で負例をサンプリングする処理をUnigramSamplerクラスを実装し、使用する。
+* Unigramとは、ひとつの連続した単語を意味し、UnigramSamplerクラスは１つの単語を対象に確率分布を作る。
+* UnigramSamplerクラスは初期化時に以下の引数を取る。
+    * corpus：単語IDリスト
+    * power：確率分布に対する累乗の値(デフォルト値=0.75)
+    * sample_size：負例サンプリングの個数
+* またUnigramSamplerクラスはget_negative_sample()メソッドを持ち、引数としてtarget(正例の単語IDリスト)を取る。
+* UnigramSamplerクラスを実際に使用する具体例は以下のようになる。
+    ```python
+    corpus = np.array([0, 1, 2, 3, 4, 1, 2, 3])
+    power = 0.75
+    sample_size = 2
+
+    sampler = UnigramSampler(corpus, power, sample_size)
+    target = np.array([1, 3, 0])
+    negative_sample = sample.get_negative_sample(target)
+    print(negative_sample)
+    # [[0 3]
+    #  [1 2]
+    #  [2 3]]
+    ```
+* 上記では正例として、[1, 3, 0]をミニバッチとしており、それぞれのデータに対する負例を2つずつサンプリングしている。
+* 1つ目のデータ1に対して、負例は[0 3]、2つ目のデータ3に対して、負例は[1 2]、3つ目のデータ0に対して、負例は[2 3]が生成されていることがわかる。
+* 以下ではNegative Samplingを実装する。ここではNegativeSamplingLossというクラスで実装する。
+* まず、コンストラクタの実装は以下のようになる。
+    ```python
+    class NegativeSamplingLoss:
+        def __init__(sekf, W, corpus, power=0.75, sample_size=5):
+            self.sample_size = sample_size
+            self.sampler = UnigramSampler(corpus, power, sample_size)
+            self.loss_layers = [SigmoidWithLoss() for _ in range(sample_size+1)]
+            self.embed_dot_layers = [EmbeddingDot(W) for _ in range(sample_size+1)]
+
+            self.params, self.grads = [], []
+            for layer in self.embed_dot_layers:
+                self.params += layer.params
+                self.grads += layer.grads
+    ```
+* 初期化の引数はそれぞれ以下となる。
+    * W：出力側の重み
+    * corpus：コーパス(単語IDのリスト)
+    * power確率分布の累乗の値
+    * sample_size：負例のサンプリング数
+* コンストラクタでは、まずUnigramSamplerクラスを生成し、そのインスタンスをメンバー変数samplerとして保持し、負例のサンプル数もメンバー変数sample_sizeに保持する。
+* メンバー変数loss_layers、embed_dot_layersにはそれぞれ、SigmoidWithLoss()、EmbeddingDot()で生成されるレイヤを格納する。
+* レイヤの数(各リストの要素する数)はsample+1個としており、これは正例用のレイヤを1つ、負例用のレイヤをsample_size個分生成することを意味する。
+* ここでは、リストの先頭のレイヤが正例を扱うレイヤとする。つまり、loss_layers[0]、embed_dot_layers[0]が正例を扱うレイヤとなる。
+* 最後に使用するパラメータと勾配をそれぞれ、params、gradsにリストとしてまとめている。
+* 次に順伝播の実装は以下のようになる。
+    ```python
+        def forward(self, h, target)
+            batch_size = target.shape[0]
+            negative_sample = self.sampler.get_negative_sample(target)
+
+            # 正例のforward処理
+            score = self.embed_dot_layers[0].forward(h, target)
+            correct_label = np.ones(batch_size, dtype=np.int32)
+            loss = self.loss_layers[0].forward(score, correct_label)
+
+            # 負例のforward処理
+            negative_label = np.zeros(batch_size, dtype=np.int32)
+            for i in range(self.sample_size):
+                negative_target = negative_sample[:, i]
+                score = self.embed_dot_layers[1+i].forward(h, negative_target)
+                loss += self.loss_layers[1+i].forward(score, negative_label)
+            
+            return loss
+    ```
+* 順伝播処理を行なうforwardメソッドは以下の引数を取る。
+    * h：中間層のニューロン
+    * target：正例のターゲット
+* 順伝播処理ではまず、self.samplerインスタンスのget_negative_sampleメソッドにより負例のサンプリングを行い、生成した負例をnegative_sampleに格納する。
+* 以降では正例と負例それぞれのデータに対し、順伝播を行い、損失を加算していく。
+* いずれもEmbeddingDotクラスのforwardメソッドでスコアを算出し、そのスコアとラベルをSigmoidWithLossクラスのforwardメソッドに渡して損失を求めている。
+* ここでラベルは正例の場合は1、負例の場合は0をNumpyのones、zerosメソッドで生成して使用している。
+* また、負例のforward処理は生成したsample_size分スコアの算出と損失の計算を行う。
+* 最後に逆伝播の実装は以下のようになる。
+    ```python
+        def backward(self, dout=1):
+            dh = 0
+            for l0, l1 in zip(self.loss_layers, self.embed_dot_layers):
+                dscore = l0.backward(dout)
+                dh += l1.backward(dscore)
+            
+            return dh
+    ```
+* 逆伝播の実装では順伝播のときとは逆順に各レイヤのbackwardメソッドを実行する。
+* また中間層のニューロンhは順伝播の差異に複数コピーされているため、その逆伝播では複数の勾配を加算することになる。
+
+# 改良版word2vecの学習
+* これまでのEmbeddingレイヤ及びNegative Samplingという手法を実装してきた。
+* 以下ではこれらの改良点を取り入れたニューラルネットワークを実装する。
+* ここでは、PTBデータセットを使って学習し、より実用的な単語の分散表現獲得を目指す。
+* ★★～P.159★★
 
 
 # Method
@@ -1401,8 +1542,8 @@
 * P.99：np.dot(c, W)
 * P.113：range(start, stop)　※start～stop-1までの整数を生成
 * P.138：dW[...] = 0
-
-
+* P.157：self.loss_layers = [SigmoidWithLoss() for _ in range(sample_size+1)]　※内包表記
+* P.159：zip(self.loss_layers, self.embed_dot_layers)
 
 
 
