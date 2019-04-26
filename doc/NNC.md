@@ -388,6 +388,47 @@
 * ただし、実際は過学習していないかをきちんと確認しておく必要がある。
 * 前述の手書き数字画像分類とアヤメの分類タスクを比較すると、誤差の収束が遅いことが分かる。
 * ニューラルネットワークは手書き文字認識タスクの画像のような非構造化データに対して精度の高いモデルを生成するのに長けている一方、アヤメの分類問題のような構造化データに対してはアルゴリズムの良さを発揮できないこともある。
-* ★★～P.108★★
 
+
+# ネットワーク構造の最適化
+* 手書き文字分類タスクを例にニューラルネットワークを作成し、ネットワーク構造を最適化して分類精度を高めることを考える。
+* PROJECT画面で以前に作成した"tutorial.basics.01_logistic_regression-trial"を選択する。
+* EDIT画面で作成済みネットワークが表示されたら、右上の「Save as」ボタンでネットワークを別名プロジェクトとして保存する。
+* ここでは"tutorial.basics.01_logistic_regression-trial4"とする。
+* "tutorial.basics.01_logistic_regression-trial"ではMNISTの一部からデータセットを抽出し、Small MNISTとし、4と9の手書き文字を分類する2値分類を行なった。
+* 以下では元のMNISTデータセットを扱うことにする。元のデータセットには手書き数字の0～9が含まれるため、タスクとしては多値分類となる。
+* 右上のDATASETタブを選択すると、Training/Validationには以下のデータセットが選択されている。
+    * Training：mnist.small_mnist_4or9_training
+    * Validation：mnist.small_mnist_4or9_test
+* Link Datasetのリンクを選択し、それぞれ以下のデータセットを選択する。
+    * Training：mnist.mnist_training
+    * Validation：mnist.mnist_test
+* 次にEDIT画面に戻り、作成済みのネットワークを変更する。
+* 元のネットワークの構成は以下の通りである。
+    * 入力層：784ノード(28×28×1)
+    * 出力層：1ノード(Affine), 活性化関数:Sigmoid
+    * 誤差関数：2値分類交差エントロピー(Binary Cross Entropy)
+* このネットワークを以下のように変更する。
+    * 入力層：784ノード(28×28×1)
+    * 中間層：128ノード(Affine), 活性化関数:ReLU 
+    * 出力層：10ノード(Affine), 活性化関数:Softmax
+    * 誤差関数：多値交差エントロピー(Categorical Cross Entropy)
+* 各レイヤを配置・結線したら、各レイヤのパラメータを以下の通り変更する。パラメータの変更はレイヤを選択し、左下のLayer Propertyで行う。
+    * 中間層のAffine2のOutshapeを100→128に変更(ReLU/DropoutのInput/Outputも自動的に128に変更される)
+    * 出力層のAffineのOutshapeを1→10に変更(SoftmaxのInput/Outputも自動で10に変更される)
+* 次にCONFIGタブを選択し、学習条件の設定を行なう。
+* a
+* ★★～P.110★★
+
+
+# NNC操作方法Tips
+* 足りないLayerの追加：
+    * 左側のComponentsの追加可能Layer一覧からドラッグ&ドロップし、Mainタブ中に配置。
+* Layer間の結線：
+    * Layer上下の黒丸同士をマウスで接続
+* Layer間の結線解除：
+    * 結線を選択し、右上のActionからDelete
+    * (結線を選択し、右クリック→Delete)
+* 複数のLayerをまとめて操作：
+    * ctrl押しながらLayerを選択
 
