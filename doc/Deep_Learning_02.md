@@ -1518,11 +1518,318 @@
 * 逆伝播の実装では順伝播のときとは逆順に各レイヤのbackwardメソッドを実行する。
 * また中間層のニューロンhは順伝播の差異に複数コピーされているため、その逆伝播では複数の勾配を加算することになる。
 
-# 改良版word2vecの学習
+# 改良版word2vecの学習・評価
 * これまでのEmbeddingレイヤ及びNegative Samplingという手法を実装してきた。
 * 以下ではこれらの改良点を取り入れたニューラルネットワークを実装する。
 * ここでは、PTBデータセットを使って学習し、より実用的な単語の分散表現獲得を目指す。
-* ★★～P.159★★
+* CBOWモデルの実装はこれまでのSimpleCROWクラスにEmbeddingレイヤとNegative Sampling Lossレイヤを導入し、改良することで実現する。
+* CBOWモデルの実装は以下の通り。
+    ```python
+    import sys
+    sys.path.append('..')
+    import numpy as np
+    from common.layers import Embedding
+    from ch04.negative_sampling_layer import NegativeSamplingLoss
+
+    class CBOW:
+        def __init__(self, vocab_size, hidden_size, window_size, corpus):
+            V, H = vocab_size, hidden_size
+
+            # Initialize weights
+            W_in = 0.01 * np.random.randn(V, H).astype('f')
+            W_out = 0.01 * np.random.randn(V, H).astype('f')
+
+            # Create layers
+            self.in_layers = []
+            for i in range(2 * window_size):
+                layer = EMbedding(W_in)
+                self.in_layers.append(layer)
+            self.ns_loss = NewgativeSamplingLoss(W_out, corpus, power=0.75, sample_size=5)
+
+            # Create lists of all weight and gradient
+            layers = self.in_layers + [self.ns_loss]
+            self.params, self.grads = [], []
+            for layer in layers:
+                self.params += layer.params
+                self.grads += layer.grads
+            
+            # Set the distributed expression of words to member variables.
+            self.word_vecs = W_in
+    ```
+* 引数としてはSimpleCBOWクラスと同様、語彙数vocab_sizeと中間層のニューロンの数hidden_sizeを受け取る。
+* 加えて、CBOWクラスでは単語IDのリストcorpus、コンテキストサイズ(周囲の単語をどれだけコンテキストとして含めるか)window_sizeを引数として受け取る。
+* 重みの初期値はSimpleCBOWと同様、np.random.randn()を使用して、W_in、W_outを生成する。
+* W_in、W_outはSimpleCBOWクラスでは形状が異なっている一方、CBOWクラスでは同じ形状となっている。
+* これは、SimpleCBOWクラスでは出力側の重みが列方向に単語ベクトルが配置されている一方、CBOWクラスでは行方向に単語ベクトルを配置しているためである。
+* これはNegativeSamplingLossクラス内でEmbeddingレイヤを使用しているためである。
+* 次にレイヤを生成する。レイヤはwindow_size*2個分を生成する。
+* 生成したレイヤはメンバー変数in_layersぶ配列としてまとめ、保持する。
+* 加えて最後にNewgativeSamplingLossレイヤを生成し、同様にメンバー変数ns_lossに保持する。
+* 生成したレイヤはlayersにまとめ、各パラメータと勾配をメンバー変数params、gradsにまとめ直す。
+* また、後から単語の分散表現にアクセスできるよう、W_in(単語の分散表現)をメンバーword_vecsに格納する。
+* 次に順伝播forward()、逆伝播backward()の実装は以下のようになる。
+    ```python
+        def forward(self, contexts, target):
+            h = 0
+            for i, layer in enumerate(self.in_layers):
+                h += layer.forward(contexts[:,i])
+            h *= 1 / len(self.in_layers)
+            loss = self.ns_loss.forward(h, target)
+            return loss
+
+        def backward(self, dout=1):
+            dout = self.ns_loss.backward(dout)
+            dout *= 1 / len(self.in_layers)
+            for layer in self.in_layers:
+                layer.backward(dout)
+            return None
+    ```
+* forward()メソッドの引数はSimpleCBOWクラスと同様、contextsとtargetの2つを取るが、SimpleCBOWではそれぞれone-hotベクトルだったのに対し、CBOWクラスでは単語IDとして扱われる。
+* contexts、targetはSimpleCBOWクラスでは、以下の通りであった。
+    * contexts：3次元NumPy配列：(コンテキストペアの数,コンテキストサイズ,語彙数)
+    * target：2次元NumPy配列：(コンテキストペアの数,語彙数)
+* 一方、CBOWクラスにおけるcontexts、targetは以下の通りとなる。
+    * contexts：単語IDを要素とする2次元NumPy配列
+    * target：単語IDを要素とする1次元NumPy配列
+* 以上を踏まえ、CBOWモデルを使用した学習の実装は以下の通りとなる。
+    ```python
+    import sys
+    sys.path.append('..')
+    import numpy as np
+    from common import config
+    # config.GPU = True　# GPUを使用する場合はコメントを外す
+    import pickle
+    from common.trainer import Trainer
+    from common.optimizer import Adam
+    from cbow import CBOW
+    from common.util import create_contexts_target, to_cpu, to_gpu
+    from dataset import ptb
+
+    # Set hyper-parameter
+    window_size = 5
+    hidden_size = 100
+    batch_size = 100
+    max_epoch = 10
+
+    # Load data set
+    corpus, word_to_id, id_to_word = ptb.load_data('train')
+    vocab_size = len(word_to_id)
+
+    contexts, target = create_contexts_target(corpus, window_size)
+    if config.GPU:
+        contexts, target = to_gpu(contexts), to_gpu(target)
+    
+    # Create model etc...
+    model = CBOW(vocal_size, hidden_size, window_size, corpus)
+    optimizer = Adam()
+    trainer = Trainer(model, optimizer)
+
+    # Start learning
+    trainer.fit(contexts, target, max_epoch, batch_size)
+    trainer.plot()
+
+    # Set the various necessary data to member variables.
+    word_vecs = model.word_vecs
+    if config.GPU:
+        word_vecs = to_cpu(word_vecs)
+    params = {}
+    params['word_vecs'] = word_vecs.astype(np.float16)
+    params['word_to_id'] = word_to_id
+    params['id_to_word'] = id_to_word
+    pkl_file = 'cbow_params.pkl'
+    with open(pkl_file, 'wb') as f:
+        pickle.dump(params, f, -1)
+    ```
+* 上記の実装では以下のようにハイパーパラメータを固定している。
+    * ウィンドウサイズ：5
+    * 隠れ層のニューロン数：100
+* 対象のコーパスにもよるが、一般的にウィンドウサイズは2～10、中間層のニューロン数(=単語の分散表現の次元数)は50～100くらいに設定すると良い結果が得られることが多い。
+* また、上記の実装で使用しているPTBコーパスはこれまでに使用してきたコーパス'You say goodbye and I say hello.'に比べて格段にサイズが大きい。
+* そのため、学習には多くの時間がかかり、通常のCPUでは半日程度かかる。
+* ここではオプションとしてGPUを使って学習を行なえるモードを用意している。
+    * 上記の実装でコメントアウトしているconfig.GPU = True部分を有効にすることでGPUを使った学習を行うことができる。
+* ただし、GPUで学習を行うためには、学習環境でNVIDIAのGPUを備えていてCuPyがインストールされている必要がある。
+* また、fit()で学習を行ったら、重み(ここでは入力側の重み)を取り出し、ファイルに保存する。
+* ここではPythonコード中のオブジェクトをファイルに保存するためにpickleを使用している。
+* 次にCBOWモデルを使用した学習で作成したモデルの評価を行う。
+* モデルの評価の実装は以下の通りとなる。
+    ```python
+    import sys
+    sys.path.append('..')
+    from common.util import most_similar
+    import pickle
+
+    pkl_file = 'cbow_params.pkl'
+
+    with open(pkl_file, 'wb') as f:
+        params = pickle.load(f)
+        word_vecs = params['word_vecs']
+        word_to_id = params['word_to_id']
+        id_to_word = params['id_to_word']
+    
+    querys = ['you', 'year', 'car', 'toyota']
+    for query in querys:
+        most_similar(query, word_to_id, id_to_word, word_vecs, top=5)
+    ```
+* まず、学習の結果得られた重みを保存したファイルを開き、各要素を取り出し、変数に格納する。
+* それらと評価用データをmost_similar()に渡す。
+* most_similar()により、querysの各単語を与えることで、その単語に対する類似単語を上位から順に表示することができる。
+* この実装を実行すると、以下のような結果が得られる。
+    ```
+    [query] you
+        we:        0.610597074032
+        someone:   0.591710150242
+        i:         0.554366409779
+        something: 0.490028560162
+        anyone:    0.473472118378
+    
+    [query] year
+        month:  0.718261063099
+        week:   0.652263045311
+        spring: 0.62699586153
+        summer: 0.625829637051
+        decade: 0.603022158146
+    
+    [query] car
+        luxury:     0.497202396393
+        arabia:     0.478033810854
+        auto:       0.471043765545
+        disk-drive: 0.450782179832
+        travel:     0.40902107954
+    
+    [query] toyota
+        ford:            0.550541639328
+        instrumentation: 0.510020911694
+        mazda:           0.49361255765
+        bethlehem:       0.474817842245
+        nissan:          0.474622786045
+    ```
+* 上記の結果から、queryに対して、類似の単語が得られていることがわかる。
+* つまり、CBOWモデルで獲得した単語の分散表現の性質が良いものであると言える。
+* また、word2vecで得られた単語の分散表現は、類似単語を集めるだけでなく、より複雑なパターンを捉えることができることがわかっている。
+* 例としては、「king - man + woman = queen」といった類推問題が挙げられる。
+* これはword2vecの単語の分散表現を用いることで類推問題をベクトルの加算と減算で解くことができること意味している。
+* 実際にこのような類推問題を解くのは、「man : woman = king : ?」の"?"を類推することになり、これは単語ベクトル空間上のman→womanというベクトルに対し、king→"?"というベクトルができるだけ近くなる単語"?"を探すことを意味する。
+* ここで、単語"man"の分散表現(単語ベクトル)を"vec('man')"で表すとすると、「man→womanというベクトルに対し、king→"?"というベクトルができるだけ近くなる単語"?"を探す」ことは、以下の関係性で表すことができる。
+    * vec('woman') - vec('man') = vec('?') - vec('king')
+* これを変形すると、以下のようになる。
+    * vec('?') = vec('king') + vec('woman') - vec('man')
+* 上記より、"?"を類推する問題は、vec('king') + vec('woman') - vec('man')を求める問題への帰着することができる。
+* この問題を解く関数をanalogy()として定義する。
+* analogy()は以下のように引数として情報を渡すことでvec('?')を求めることができる。
+    * analogy('man', 'king', 'woman', word_to_id, id_to_word, word_vecs, top=5)
+* またanalogy()は以下のようにスコアが高い順に5つの単語が出力されるものとする。
+    ```
+    [analogy] man:king = woman:?
+        word1: 5.003233
+        word2: 4.400302
+        word3: 4.22342
+        word4: 4.003234
+        word5: 3.934550
+    ```
+* これを踏まえ、以下のような引数を指定して、analogy()関数を実行する。
+    * analogy('king', 'man', 'queen', word_to_id, id_to_word, word_vecs, top=5)
+    * analogy('take', 'took', 'go', word_to_id, id_to_word, word_vecs, top=5)
+    * analogy('car', 'cars', 'child', word_to_id, id_to_word, word_vecs, top=5)
+    * analogy('good', 'better', 'bad', word_to_id, id_to_word, word_vecs, top=5)
+* 上記を実行すると、それぞれ以下の結果が得られる。
+    ```
+    [analogy] king:man = queen:?
+        woman: 5.161407947540283
+        veto: 4.928170680999756
+        ounce: 4.689689636230469
+        earthquake: 4.633471488952637
+        successor: 4.6089653968811035
+    
+    [analogy] take:took = go:?
+        went: 4.548568248748779
+        points: 4.248863220214844
+        began: 4.090967178344727
+        comes: 3.9805688858032227
+        oct: 3.9044761657714844
+
+    [analogy] car:cars = child:?
+        children: 5.217921257019043
+        average: 4.725458145141602
+        yield: 4.208011627197266
+        cattle: 4.18687629699707
+        priced: 4.178797245025635
+
+    [analogy] good:better = bad:?
+        more: 6.647829532623291
+        less: 6.063825607299805
+        rather: 5.220577716827393
+        slower: 4.733833312988281
+        greater: 4.672840118408203
+    ```
+* この結果は概ね期待した通りの結果と言える。
+* 1～3番目は正しく答えられていると言える一方、4番目は正しく答えられていない。
+* 与えられた単語の比較級を答えるべきだが、"more"となってしまい、正しい答えは"worse"である。
+* ただ上位に挙げられているのは、"more"、"less"などの比較級の単語となっており、正しくはないもののある程度の性質は単語の分散表現にエンコードできていると言える。
+* このようにword2vecでは得られた単語の分散表現を使うことでベクトルの加減算により、単語の類推問題を解くことができる。
+* さらに単語の意味だけではなく、文法的な情報も捉えることができていることがわかる。
+* ただし、PTBデータセットは単語の類推問題を解くには小規模であり、多くの類推問題を正しく解くことができない。
+* 類推問題を精度良く解くためには、より大きなコーパスを対象として学習を行う必要がある。
+
+# word2vecのアプリケーションの例
+* word2vecで得られた単語の分散表現は類似単語を求めることができる、という利点に加え、転移学習(transfer learning)に利用できることが重要な利点として挙げられる。
+* 転移学習により、ある分野で学習した知識を他の分野にも適用することができる。
+* 自然言語のタスクを解く場合、通常word2vecによる単語の分散表現をゼロから学習することはほとんどない。
+* 多くの場合、大きなコーパス(Wikipedia, Google Newsのテキストデータなど)で学習済みの単語の分散表現を個別のタスクに利用する。
+* テキスト分類や文書クラスクラスタリング、品詞タグ付け、感情分析といったタスクにおいて、最初のステップでは単語をベクトルに変換する必要がある。
+* このときに学習済みの単語の分散表現を利用する。
+* また単語の分散表現の利点は、単語を固定長のベクトルに変換できることにある。
+* さらに文章(単語の並び)に対しても、単語の分散表現を使うことで固定長のベクトルに変換でき、文章をどのように固定長のベクトルに変換するかは多く研究されている。
+* 最も単純な方法は文章の各単語の分散表現の総和を求める方法が考えられる。
+* これはbag-of-wordsと呼ばれ、単語の順序を考慮しないモデルである。
+* また、リカレントニューラルネットワーク(RNN)を使うことでword2vecの単語の分散表現を利用しつつ、文章を固定長のベクトルに変換することができる。
+* 単語や文章を固定長のベクトルに変換できることは、一般的な機械学習の手法(ニューラルネットワークやSVMなど)が適用できることを意味するため、非常に重要である。
+* このことは以下のような処理の流れ(パイプライン)で表すことができる。
+    * 質問(自然言語) → 単語のベクトル化(word2vec) → 機械学習システム(ニューラルネットワークやSVMなど) → 答え
+* ベクトル化された固定長のベクトルは機械学習システムへの入力となる。つまり、機械学習システムによって、目的の答えを出力することができることを意味する。
+* このようなパイプラインにおいては通常、単語の分散表現の学習と機械学習システムの学習は別のデータセットを使って個別に学習を行なう。
+    * 単語の分散表現の学習はWikipediaのような汎用的なコーパスを使って学習を先に済ませておく。
+    * 一方、現状のタスクに関してはそのタスクのために集められたデータを対象に機械学習システムに入力して学習を行う。
+* 以下では具体敵に単語の分散表現の使い方を見ていく。
+* ここでは利用者が1億人を超えるスマートフォンアプリの開発・運営をしているとする。
+* そのアプリに関して、ユーザからは多くの意見やつぶやきが届けられる。それらの中には好意的なものもあれば、不満を持っていると考えられるものもある。
+* そこで、これらのユーザの声を自動で分類するシステムを作ることを考える。
+* 例えば、ユーザから送られてくるメールの内容からユーザの感情を3段階に分類する。
+* これにより、不満を持つユーザの声にいち早く目を通すことを実現する。
+* これはアプリの致命的な問題を発見し、早期に手を打つことでユーザの満足度を改善することができること意味する。
+* メールの自動分類システムを作成するためには、まずメール(データ)を収集する必要がある。
+* 集めたメールはそれぞれに対して、人手でラベル付けを行う。つまり3段階の感情を表すラベル(positive/neutral/negative)を付与する。
+* ラベル付けを行なったら、学習済みのword2vecを用いて、メールの文章をベクトルに変換します。
+* 最後に感情分析を行う何らかの分類システムに対して、ベクトルかされたメールと感情ラベルを与えて学習する。
+
+# 単語ベクトルの評価方法
+* word2vecで得られた単語の分散表現の良さはどう評価すべきかを考える。
+* 単語の分散表現は上述のような感情分析のように現実的には何らかのアプリケーションで使われることが多い。
+* その場合、望まれるのは精度が良いシステムであるが、そのシステムは複数のシステムで構成されていることを考えておく必要がある。
+* 例えば、上述の感情分析を行うシステムでは、単語の分散表現を作るシステムと特定の問題に対して分類を行うシステムがある。
+* つまり感情分析を行うシステムは2段階の学習を行なった上で評価する必要があり、2つのシステムにおいて最適なハイパーパラメータのためのチューニングも必要となる。
+* そこで、単語の分散表現の良さのみを評価する場合は、現実的なアプリケーションとは切り離して評価するのが一般的である。
+* その際によく用いられる単語の分散表現の評価指標は単語の類似性や類推問題による評価である。
+* まず単語の類似性の評価では、人間が作成した単語類似度の評価セットを使って評価が行われる。
+* 例えば、0～10でスコア化するとすると、"animal"と"cat"は8、"cat"と"car"は2というように人が単語間の類似性を採点する。
+* そのスコアとword2vecによるコサイン類似度のスコアを比較して相関性を確認する。
+* 次に類推問題による評価は「king : queen = man : ?」のような類推問題を出題し、その正解率で単語の分散表現を評価する。
+* ある論文ではword2vecのモデル、単語の分散表現の次元数、学習したコーパスのサイズをパラメータとして比較実験を行っている。
+* これらに対し、Semantics(単語の意味を類推する問題)、Syntax(単語の形状情報を問う問題)の問題を解かせ、その正答率を比較する。
+* この比較実験から分かることは以下の通り。
+    * モデルによって精度が異なるため、コーパスに応じて最適なモデルを選ぶ必要がある。
+    * 学習に使用したコーパスが大きいほど、良い結果が得られる。
+    * 単語ベクトルの次元数は適度な大きさが必要で大きすぎても小さすぎても精度が悪くなる。
+* 類推問題を解いた結果を比較によって、そのモデルが単語の意味や文法的な問題を正しく理解しているかを計測することができる。
+* また、類推問題を精度良く説くことができるモデルであれば、自然言語を扱うアプリケーションでも良い結果を得られることが期待できる。
+* ただし、モデルの良さ(単語の分散表現の良さ)がアプリケーションにどれだけ貢献できるかはアプリケーションの種類やコーパスの内容など取り扱う問題の状況に応じて変化する。
+* つまり、類推問題を精度良く解けたとしても、アプリケーションで良い結果が得られるとは限らない。
+
+# リカレントニューラルネットワーク(RNN)
+* a
+* ★★～P.172★★
+
+
 
 
 # Method
