@@ -1998,7 +1998,187 @@
 * 上述のようにTruncated BPTT自体の原理は比較的単純だが、ネットワークへのデータの与え方(データを順番に与えること、各バッチでデータを与える開始位置をずらすこと)には注意が必要となる。
 
 # RNNの実装
-* ★★～P.193★★
+* 以降ではRNNを実装していく。上述の通り、RNNは横方向に伸びたニューラルネットワークとみなすことができ、Truncated BPTTによる学習を行なうことを考えると、横方向に固定サイズ分のネットワークを作る必要がある。
+    ```
+     h0       h1       h2                  hT-1
+     ↑        ↑        ↑                   ↑
+     |        |        |                   |
+    RNN ---→ RNN ---→ RNN ---→ ・・・ ---→ RNN ---→ ht
+     ↑        ↑        ↑                   ↑
+     |        |        |                   |
+     X0       X1       X2                  XT-1
+    ```
+* ここでは上記のように長さTの時系列データを受け取るニューラルネットワークを作ることを考える(Tは任意の値)。
+* つまりこれにより、ネットワークは各時刻の隠れ状態をT個出力する。
+* 実装にあたり、モジュール性を考慮して、上図の横に伸びたニューラルネットワークを1つのレイヤとして実装する。
+    ```
+       hs = (h0, h1, ..., hT-1)
+       ↑
+       |
+    Time RNN
+       ↑
+       |
+       xs = (x0, x1, ..., xT-1)
+    ```
+* 図で表すと上記のようになる。
+* 上下の入力・出力をそれぞれ1つにまとめ、ベクトルxs, hsとし、xsを入力、hsを出力する1つのレイヤとみなす。
+* このTステップ分の処理ををまとめて行うレイヤを"Time RNNレイヤ"と呼び、Time RNNレイヤ内の1ステップの処理を"RNNレイヤ"と呼ぶ。
+* まずはRNNの1ステップの処理を行うRNNクラスの実装を行う。
+* RNNの順伝播は上述の通り、以下の式で表される。
+    * ht = tanh(ht-1 Wh + xt Wx + b)　　　　(5.10)　=　(5.9)
+        * Wx：入力xを出力hに変換するための重み
+        * Wh：1つ前のRNNの出力を次時刻の出力に変換するための重み
+        * b ：バイアス
+        * ht-1, xtはいずれも行ベクトルとする。
+* ここでの学習はミニバッチとしてデータをまとめて処理するため、xtとhtは各サンプルデータとその結果を行方向に格納することになる。
+* これを考慮すると、(5.10)における各行列の大きさは以下のようになる。
+    * ht-1：N * H
+    * Wh　：H * H
+    * Xt　：N * D
+    * Wx　：D * H
+    * ht　：N * H
+        * N：バッチサイズ
+        * D：入力ベクトルの次元数
+        * H：隠れ状態ベクトルの次元数
+* 上記を踏まえると、RNNクラスの初期化と順伝播の実装は以下の通りとなる。
+    ```python
+    class RNN:
+        def __init__(self, Wx, Wh, b):
+            self.params = [Wx, Wh, b]
+            self.grads = [np.zeros_like(Wx), np.zeros_like(Wh), np.zeros_like(b)]
+            self.cache = None
+        
+        def forward(self, x, h_prev):
+            Wx, Wh, b = self.params
+            t = np.dot(h_prev, Wh) + np.dot(x, Wx) + b
+            h_next = np.tanh(t)
+
+            self.cache = (x, h_prev, h_next)
+            return h_next
+    ```
+* RNNの初期化では、引数として重み(Wx, Wh)とバイアス(b)を受け取り、渡されたパラメータはメンバー変数paramsにリストとして保持する。
+* 次に勾配は各パラメータWx, Wh, bの形状に合わせ各要素を0として初期化され、メンバー変数gradsにリストとして保持する。
+* 最後に逆伝播時の計算に使用する中間データcacheをNoneで初期化する。
+* 順伝播処理を行うfoward()メソッドでは、x,h_prev(下からの入力と左からの入力)を引数として受け取り、(5.10)を実装している。
+* h_nextはその時刻におけるRNNレイヤの出力であり、次時刻のレイヤへの入力となる。
+* ここで順伝播の計算グラフを確認する。
+* (5.10)からもわかる通り、順伝播の計算グラフでは、行列の積計算を行なう「MatMul」、足し算を行う「+」、tanhを計算する「tanh」の3つの演算から構成されると言える。
+* この順伝播の計算グラフを元にすると、逆伝播の計算グラフを描くことができ、それを元に逆伝播の実装を行うことができる。
+* RNNクラスの逆伝播の実装は以下の通りとなる。
+    ```python
+        def backward():
+            Wx, Wh, b = self.params
+            x, h_prev, h_next = self.cache
+            
+            dt = dh_next * (1 - h_next**2)
+            db = np.sum(dt, axis=0)
+            dWh = np.dot(h_prev.T, dt)
+            dh_prev = np.dot(dt, Wh.T)
+            dWx = np.dot(x.T, dt)
+            dx = np.dot(dt, Wx.T)
+
+            self.grads[0][...] = dWx
+            self.grads[1][...] = dWh
+            self.grads[2][...] = db
+
+            return dx, dh_prev
+    ```
+* 次にTime RNNレイヤの実装を行う。TimeRNNレイヤはT個のRNNレイヤで構成されている。
+* また、ここではRNNレイヤの隠れ状態hをメンバー変数として保持するようにし、隠れ状態の引き継ぎを行なう際に使用する。
+* つまり隠れ状態hをTime RNNレイヤで管理することになる。これにより、Time RNNを使う場合、RNNレイヤの隠れ状態の引き継ぎを考える必要がなくなる。
+* この隠れ状態を引き継ぐかどうかをstatefulという引数で調整できるように実装する。
+* まず、初期化とstatefulのset, resetを行う関数の実装は以下の通り。
+    ```python
+    class TimeRNN:
+        def __init__(self, Wx, Wh, b, stateful=False):
+            self.params = [Wx, Wh, b]
+            self.grads = [np.zeros_like(Wx), np.zeros_like(Wh), np.zeros_like(b)]
+            self.layers = None
+
+            self.h, self.dh = None, None
+            self.stateful = stateful
+        
+        def set_state(self, h):
+            self.h = h
+        
+        def reset_state(self):
+            self.h = None
+    ```
+* コンストラクタでは引数として、重みWx, Wh、バイアスb、隠れ状態を引き継ぐかどうかのフラグ(Boolean)を受け取る。
+* メンバー変数はまずparams、grads、statefulがあり、paramsはWx, Wh, bを格納して初期化し、gradsはWx, Wh, bと同じ形の行列で要素を0として初期化する。statefulは引数として受け取ったBooleanで初期化する。
+* layers, h, dhはそれぞれNoneで初期化する。
+* layersは複数のRNNレイヤをリストで保持するために使用し、hはforward()関数を呼んだときの最後のRNNレイヤの隠れ状態を保持するために使用する。
+* またdhはbackward()関数を呼んだときの1つ前のブロックへの隠れ状態の勾配を保持するために使用する。
+* statefulは状態を持つという意味の単語でここでは、stateful=TrueのときはTime RNNレイヤで「状態を持つ」ように動作することを意味する。
+* Time RNNにおける「状態を持つ」とは、Time RNNレイヤの隠れ状態を維持することを意味し、どんなに長い時系列データも順伝播を断ち切ることなく伝播させることを意味する。
+* 逆にstateful=FalseはTime RNNレイヤのforward()関数が呼ばれるたびに最初のRNNレイヤの隠れ状態を要素が全て0の行列で初期化する。これは状態を持たないモードであり、ステートレスと呼ばれる。
+* 次にTime RNNの順伝播の実装は以下の通りとなる。
+   ```python
+       def forward(self, xs):
+            Wx, Wh, b = self.params
+            N, T, D = xs.shape
+            D, H = Wx.shape
+
+            self.layers = []
+            hs = np.empty((N, T, H), dtype='f')
+
+            if not self.stateful or self.h is None:
+                self.h = np.zeros((N, H), dtype='f')
+            
+            for t in range(T)
+                layer = RNN(*self.params)
+                self.h = layer.forward(xs[:, t, :], self.h)
+                hs[:, t, :] = self.h
+                self.layers.append(layer)
+            
+            return hs
+   ```
+* 順伝播のforward()関数では引数として、下側からの入力xsを受け取る。ここでxsはT個分の時系列データを1つにまとめたものである。
+* ここでバッチサイズをN、入力ベクトルの次元数をDとすると、xsの形状は(N, T, D)となる。
+* 次に上側への出力hsを大きさ(N, T, H)で初期化する(H:隠れ状態のベクトルの次元数)。
+* 次に隠れ状態hはメンバー変数として持ち、statefulがFalseの場合(not self.stateful)、もしくは初回呼び出し時(self.h is None)のみ要素0かつ(N, H)の大きさで初期化する。
+* for文でT回の繰り返し処理でRNNレイヤを生成し、処理する。
+* for文内ではRNNレイヤを生成し、RNNレイヤの順伝播処理を実行し、時刻tにおける隠れ状態hを生成し、hsに格納する。また、各layerもlayersにapeendし保持する。
+* Time RNNレイヤのforward()関数が呼ばれると、メンバー変数hには最後のRNNレイヤの隠れ状態が設定される。
+* statefulがTrueの場合は次にforward()関数が呼ばれるときにそのメンバー変数hが継続して使用され、statefulがFalseの場合はメンバー変数hがゼロ行列で初期化されて利用される。
+* 次にTime RNNの逆伝播の実装を考える。
+* ここでは上側の出力側から伝わる勾配をdhs = dh0, dh1, ..., dhT-1、下側の入力側へ伝わる勾配をdxs = dx0, dx1, ..., dxT-1で表す。
+* また、Truncated BPTTを行なうため、このブロックの前時刻の逆伝播は必要なく、前時刻への隠れ状態の勾配はメンバー変数dhに保持するようにする。
+* 次にt番目のRNNレイヤに着目して逆伝播を考えると、上側の出力から勾配dhtが伝わり、ひとつ未来のレイヤからdhnextが伝わることがわかる。
+* 順伝播で出力が上側と右側に分岐している場合、逆伝播では各勾配が合算され伝わる。
+* つまり、t番目のRNNレイヤの逆伝播では、"dht + dhnext"が前レイヤに伝わると言える。
+* これらを踏まえると、実装は以下の通りとなる。
+    ```python
+       def backward(self, dhs):
+           Wx, Wh, b = self.params
+           N, T, H = dhs.shape
+           D, H = Wx.shape
+
+           dxs = np.empty((N, T, H), dtype='f')
+           dh = 0
+           grads = [0, 0, 0]
+           for t in reversed(range(T)):
+               layer = self.layers[t]
+               dx, dh = layer.backend(dhs[:, t, :] + dh)
+               dxs[:, t, :] = dx
+
+               for i, grad in enumerate(layer.grads):
+                   grads[i] += grad
+            
+            for i, grad in enumerate(grads):
+                self.grads[i][...] = grad
+            self.dh = dh
+
+            return dxs
+    ```
+* 逆伝播のbackward()関数では引数として、上側からの入力dhsを受け取る。
+* 次に下流へ流す出力dxsを大きさ(N, T, D)で初期化する(D:入力ベクトルの次元数)。
+* 順伝播とは逆の順番でfor文を回し、RNNレイヤのbackward()メソッドを呼び出す。
+* 各時刻の勾配dxを算出し、dxsの該当のインデックスに結果を代入する。
+* 重みに関しても、各RNNレイヤでの重みの勾配を加算していき、self.gradsに最終的な結果を上書きする。
+* Time RNNレイヤはRNNレイヤを複数含んでおり、それらのRNNレイヤでは同じ重みを使用している。
+* そのため、TIme RNNレイヤの最終的な重みの勾配は、各RNNレイヤの重みの勾配を加算したものとなる。
+* ★★～P.204★★
 
 
 
@@ -2022,6 +2202,8 @@
 * P.138：dW[...] = 0
 * P.157：self.loss_layers = [SigmoidWithLoss() for _ in range(sample_size+1)]　※内包表記
 * P.159：zip(self.loss_layers, self.embed_dot_layers)
-
+* P.202：hs = np.empty((N, T, H), dtype='f')
+* P.202：layer = RNN(*self.params)
+* P.204：for t in reversed(range(T)):
 
 
