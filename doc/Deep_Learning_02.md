@@ -2178,7 +2178,155 @@
 * 重みに関しても、各RNNレイヤでの重みの勾配を加算していき、self.gradsに最終的な結果を上書きする。
 * Time RNNレイヤはRNNレイヤを複数含んでおり、それらのRNNレイヤでは同じ重みを使用している。
 * そのため、TIme RNNレイヤの最終的な重みの勾配は、各RNNレイヤの重みの勾配を加算したものとなる。
-* ★★～P.204★★
+
+# RNNLMの実装
+* ここまで、RNNレイヤ及び時系列データをまとめて処理するTime RNNレイヤを実装してきたが、最終的にはRNNを使った言語モデルを実装することを目指す。
+* RNNによる言語モデル(RNN Language Model)はRNNLMと呼ぶ。
+* 以降ではRNNレイヤ、Time RNNレイヤに加え、RNNLMを実装するのに必要なレイヤを新たに作成する。
+* 最もシンプルなRNNLMのネットワークは以下の左側のネットワークになり、それをこれまでと時間軸方向に展開したネットワークをその右側に示すと、以下のようになる。
+    ```
+      yt            y0         y1         y2                      yt
+      ↑             ↑          ↑          ↑                       ↑
+      |             |          |          |                       |
+    Softmax       Softmax    Softmax    Softmax                 Softmax
+      ↑             ↑          ↑          ↑                       ↑
+      |             |          |          |                       |
+    Affine        Affine     Affine     Affine                  Affine
+      ↑_____        ↑          ↑          ↑                       ↑
+      |     |       |          |          |                       |
+     RNN ←---  ＝  RNN -----→ RNN -----→ RNN -----→ ・・・ -----→ RNN -----→ ht
+      ↑             ↑          ↑          ↑                       ↑
+      |             |          |          |                       |
+   Embedding     Embedding  Embedding  Embedding               Embedding
+      ↑             ↑          ↑          ↑                       ↑
+      |             |          |          |                       |
+      wt            w0         w1         w2                      wt
+    ```
+* 最初の層はEmbeddingレイヤであり、単語IDを単語の分散表現へと変換する。
+* 変換された単語の分散表現がRNNレイヤへと入力され、隠れ層を次の層(上の層)へ出力すると同時に次時刻のRNNレイヤへの入力(右方向への出力)となる。
+* RNNレイヤの上方向の出力はAffineレイヤを経てSoftmaxレイヤへと伝わる。
+* 次にこのニューラルネットワークに対して順伝播だけを考えて、具体的なデータを流してみる。
+* ここではこれまで使用してきた"You say goodbye and I say hello."を使用する。
+* まず最初の時刻では先頭の単語として単語ID=0の"you"がw0として入力される。
+* このときのSoftmaxレイヤが出力する確率分布を見ると、"say"が最も高くなる。これは"you"の次が"say"であることを正しく推測できているためである。
+* ただし、このような正しい予測はよく学習された重みがあって初めて可能となる。
+* 次に2つ目の単語である"say"を入力する箇所に注目するとSoftmaxレイヤの出力は"goodbye"と"hello"の2箇所が高くなっている。
+* これは、"you say goodbye"、"you say hello"のどちらも自然な文章なので、当然の結果と言える。
+* ここからRNNレイヤは"you say"という文脈を記憶している、ということがわかる。
+* 厳密にいえば、"you say"という過去の情報を隠れ状態ベクトルとしてRNNが保持している、と言える。
+* このようにRNNLMはこれまで入力された単語を記憶し、それをもとに対木の単語を予測することができると言える。
+* これを可能にしているのがRNNレイヤである。RNNレイヤが過去から現在へとデータを継続して流すことで過去の情報をエンコードして記憶することを可能にしている。
+* 以降では、Time RNNレイヤのように時系列データをまとめて処理するレイヤを実装する。
+* これらのレイヤを用いることで、上図の時間軸方向に展開したネットワークを以下のように実装することができる。
+    ```
+      y0         y1         y2                      yt                   ys
+      ↑          ↑          ↑                       ↑                    ↑
+      |          |          |                       |                    |
+    Softmax    Softmax    Softmax                 Softmax           Time Softmax
+      ↑          ↑          ↑                       ↑                    ↑
+      |          |          |                       |                    |
+    Affine     Affine     Affine                  Affine            Time Affine
+      ↑          ↑          ↑                       ↑                    ↑
+      |          |          |                       |                    |
+     RNN -----→ RNN -----→ RNN -----→ ・・・ -----→ RNN -----→ ht　＝ Time RNN
+      ↑          ↑          ↑                       ↑                    ↑
+      |          |          |                       |                    |
+   Embedding  Embedding  Embedding               Embedding        Time Embedding
+      ↑          ↑          ↑                       ↑                    ↑
+      |          |          |                       |                    |
+      w0         w1         w2                      wt                   wS
+    ```
+* このようにT個分の時系列データをまとめて処理するレイヤを"Time ○○レイヤ"と呼ぶ。
+* Timeレイヤの実装は比較的簡単であり、例えば、Time AffineレイヤはAffineレイヤをT個用意し、各時刻のデータを個別に処理するのみである。
+* Time Embeddingレイヤも同様に順伝播時にT個のEmbeddingレイヤをT個用意し、各時刻のデータを個別に処理する。
+* ただし、Time Affineレイヤは効率的な処理を実装のために、T個のAffineレイヤを用意する実装は行わず、行列計算としてまとめて処理するものにする。
+* 一方、Time Softmaxレイヤに関しては損失誤差であるCross Rntropy Errorレイヤと合わせてTime Softmax with Lossレイヤとして実装する。
+* T個のSoftmax with Lossレイヤはそれぞれの損失を計算し、それらを合算して平均を取ったものを最終的な損失とする。
+* これを数式で表すと以下のようになる。
+    * L = 1/T (L0 + L1 + ・・・ + LT-1)　　(5.11)
+* Time RNNレイヤに加え、Time Embedding, Time Affine, Time Softmax with Lossの各レイヤを準備することでRNNLMの実装に必要なレイヤを全てそろえることができた。
+* 以降では実際にRNNLMを実装し、学習とその評価を行う。
+* RNNLMで使用するネットワークをSimpleRNNLMというクラス名で実装する。
+* SimpleRNNLMクラスはTime Embedding, Time RNN, Time Affine, Time Softmax with Lossという4つのレイヤを重ねたニューラルネットワークとなる。
+* 初期化部分の実装は以下の通りとなる。
+    ```python
+    import sys
+    sys.path.append('..')
+    import numpy as np
+    from common.time_layers import *
+
+    class SimpleRnnlm:
+        def __init__(self, vocab_size, wordvec_size, hidden_size):
+            V, D, H = vocab_size, wordvec_size, hidden_size
+            rn = np.random.randn
+
+            # Initialize weights
+            embed_W = (rn(V, D) / 100).astype('f')
+            rnn_Wx = (rn(D, H) / np.sqrt(D)).astype('f')
+            rnn_Wh = (rn(H, H) / np.sqrt(H)).astype('f')
+            rnn_b = np.zeros(H).astype('f')
+            affine_W = (rn(H, V) / np.sqrt(H)).astype('f')
+            affine_b = np.zeros(V).astype('f')
+
+            # Create layers
+            self.layers = [
+                TimeEmbedding(embed_W),
+                TimeRNN(rnn_Wx, rnn_Wh, rnn_b, stateful=True).
+                TImeAffine(affine_W, affine_b)
+            ]
+            self.loss_layer = TimeSoftmaxWithLoss()
+            self.rnn_layer = self.layers[1]
+
+            self.params, self.grads = [], []
+            for layer in layers:
+                self.params += layer.params
+                self.grads += layer.grads
+    ```
+* ここでは各レイヤで使用する重みとバイアスを初期化し、必要なレイヤを生成している。
+* また、Truncated BPTTで学習を行うことを想定し、Time RNNレイヤの引数statefulでTrueを設定している。
+* これにより、Time RNNレイヤが全時刻のかくて状態を引き継ぐことが可能となる。
+* 上記における重みとバイアスの初期化においては"Xavierの初期値"を用いて初期化している。
+* Xavierの初期値では前層のノードの個数をnとした場合、1/√nの標準偏差(データのばらつきを表す指標)を持つ分布を使用する。
+* ディープラーニングでは重みの初期値が非常に重要であり、良い初期値を設定することで学習の進み方や最終的な制度が大きく変わってしまう。
+* 以降、重みの初期値として、Xavierの初期値を用いるが、言語モデルの研究では0.01 * np.random.uniform(...)のようにスケール変換した一様分布が用いられるケースが多い。
+* 次にforward()メソッド、backward()メソッド、reset_state()メソッドの実装は以下のようになる。
+    ```python
+        def forward(self, xs, ts):
+            for layer in layers:
+                xs = layer.forward(xs)
+            loss = self.loss_layer.forward(xs, ts)
+            return loss
+        
+        def backward(self, dout=1):
+            dout = self.loss_layer.backward(dout)
+            for layer in reversed(self.layers):
+                dout = layer.backward(dout)
+            return dout
+        
+        def reset_state(self):
+            self.rnn_layer.reset_state()
+    ```
+* ここまででRNNLMモデルの実装でるSimpleRnnlmの実装が完了したため、次にネットワークにデータを与えて、学習を行うことを考える。
+* その前にまずは言語モデルの評価方法について検討する。
+* 言語モデルは過去に与えられた単語から次に出現する単語の確率分布を出力するものである。この言語モデルの予測性能の良さを評価する指標として、パープレキシティ(perplexity)がよく用いられる。
+* パープレキシティは簡単には確率の逆数を表す。
+* ここで、"you say goodbye and I say hello."というコーパスを考え、あるモデル1に"you"という単語を与えると、確率分布として、"say"が0.8という確率が得られたとする。
+* これは比較的良い予測と言えるが、このときのパープレキシティは1/0.8 = 1.25となる。
+* 一方、モデル2に"you"という単語を与えると、確率分布として、"say"が0.2という確率が得られたとする。
+* これはあまり良くない予測と言えるが、このときのパープレキシティは1/0.2 = 5となる。
+* つまりパープレキシティは良い予測ができるモデルほど小さい値となる指標と言える。
+* 次に上記のようにして得られたパープレキシティの値は直感的にはどういう解釈ができるかを考える。
+* これは"分岐数"、つまり次に取り得る選択肢の数(次に出現しうる単語の候補数)と考えることができる。
+* パープレキシティが1.25の場合、次の単語の候補が1個程度に絞ることができことを意味し、5の場合はまだ単語の候補が5個もあることを意味している。
+* 上記を踏まえ、入力データが1つから複数になった場合のパープレキシティについて考えると、以下のような計算で算出される。
+    * perplexity = e^L　　(5.13)
+    * L = -(1/N) ΣΣtnk log ynk　　(5.12)
+        * N：データ数
+        * tn：one-hotベクトルの正解ラベルのベクトル。よって、tnkはn個目のデータのk番目の値を意味する。
+        * ynk：確率分布(ニューラルネットワークにおけるSoftmaxの出力)
+* (5.12)で得られるLはニューラルネットワークの損失であり、このLを使って算出したe^Lがパープレキシティとなる。
+* a
+* ★★～P.215★★
 * 5.4 & 5.5 & 5.6
 
 
